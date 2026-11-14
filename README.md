@@ -4,7 +4,7 @@
 
 **▶ Watch:** [30-second demo](media/demo-30s.mp4) (English subtitles: [media/demo-30s.en.srt](media/demo-30s.en.srt))
 
-![Outpost 30 on sol 1: a real particle storm detected by NASA's SOHO observatory on 18 January 2026, and the Storm shelter card already played](media/screenshot.jpg)
+![Outpost 30 on sol 1: the animated base at Jezero during a particle storm that NASA's SOHO observatory detected on 18 January 2026](media/screenshot.jpg)
 
 Outpost 30 is a browser card game for kids aged 7–12, built for the NASA Space Apps Challenge "Build a Junior Astronaut Mission Trainer". You and a crewmate run a small base at Jezero crater on Mars for 30 sols (Mars days). Every sol you pick 2 of 3 cards, and every card costs something: making oxygen drains power, building a radiation shield costs water, and hiding from a storm costs you a turn. You balance three bars (Life Support, Power and Shield) while the game replays **real NASA space weather**: solar flares, CMEs and particle storms from NASA's DONKI database. When the browser is online it fetches the last 30 days from NASA live; when it is offline it uses an embedded archive and clearly says so. Every real fact in the game has a "Where does this come from?" button that links to its NASA or CSA source. At the end, a debrief replays your mission to show which 3 choices mattered most.
 
@@ -17,7 +17,7 @@ Outpost 30 is a browser card game for kids aged 7–12, built for the NASA Space
 5. **Press sunset.** The base uses air, power and Shield, then the next sol starts.
 6. **Win:** reach sol 30 with all three bars above 0, plus ⭐ 3 science stars and 🌱 5 harvests. Keep at least 4 mSv of Shield for 3 stars.
 
-After the mission, the debrief shows a sol-by-sol chart of your three bars, replays your game to find the 3 choices that mattered most, and compares your radiation dose with real Mars and space station measurements.
+The base is alive: an animated scene shows today's storms, flares, dust and breakdowns, and everything you built. A short sunset between sols shows what the base used overnight. After the mission, the debrief shows a sol-by-sol chart of your three bars, replays your game to find the 3 choices that mattered most, and compares your radiation dose with real Mars and space station measurements.
 
 Tips: tap any dotted word (sol, mSv, CME...) for a one-sentence explanation. Kip, your guide, gives hints. For a class, add `?seed=123&level=cadet` to the URL so everyone plays the same mission.
 

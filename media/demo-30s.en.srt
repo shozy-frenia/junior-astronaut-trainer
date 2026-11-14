@@ -12,7 +12,7 @@ The same day, NASA’s SOHO observatory detected a particle storm near Earth. St
 
 4
 00:00:15,000 --> 00:00:20,000
-We pay it: the storm now takes 1.2 mSv of Shield instead of 4, and Power drops to 52. No choice is free.
+We pay 8 kWh: the storm takes 1.2 mSv of Shield instead of 4. Sunset shows the cost. No choice is free.
 
 5
 00:00:20,000 --> 00:00:25,000
