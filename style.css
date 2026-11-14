@@ -41,7 +41,7 @@ button.link { background:none; border:0; box-shadow:none; min-height:2.75rem; pa
 .tile .ico { font-size:1.6rem; line-height:1; }
 .tile .num { font-size:2.1rem; font-weight:900; line-height:1.05; font-variant-numeric:tabular-nums; }
 .tile .track { height:1rem; border:2px solid var(--ink); border-radius:99px; background:#fff; overflow:hidden; margin:.25rem 0; }
-.tile .fill { height:100%; transition:width .35s; }
+.tile .fill { height:100%; transition:width .7s cubic-bezier(.2,.8,.2,1); }
 .k-ls .fill { background:var(--ls); } .k-power .fill { background:var(--pw); } .k-shield .fill { background:var(--sh); }
 .tile .lbl { font-size:.88rem; font-weight:700; line-height:1.2; }
 .tag { font-size:.8rem; font-weight:900; border-radius:99px; padding:.05rem .55rem; border:2px solid var(--ink); background:var(--warn); color:var(--ink); white-space:nowrap; }
@@ -148,7 +148,7 @@ footer { margin:1.4rem 0 2.4rem; }
   .tile .row { display:contents; } .tile .ico { grid-area:ico; font-size:2.2rem; } .tile .tag { grid-area:tag; } .tile .num { grid-area:num; } .tile .track { grid-area:track; } .tile .lbl { grid-area:lbl; }
 }
 @media (max-width:420px) { .tile .num { font-size:1.9rem; } .tile .ico { font-size:1.4rem; } .kip { width:4.4rem; } }
-@media (prefers-reduced-motion:reduce) { * { animation:none !important; transition:none !important; } }
+
 
 /* rank picker, rank chip, debrief chart */
 .ranks { display:grid; grid-template-columns:1fr; gap:.2rem 1rem; }
@@ -157,3 +157,121 @@ button.rank .sub { font-size:.95rem; font-weight:700; }
 .rankchip { font-size:.9rem; font-weight:800; background:#fff; border:2px solid var(--ink); border-radius:99px; padding:.1rem .7rem; }
 .chart svg { display:block; width:100%; height:auto; margin:.3rem 0; }
 @media (min-width:900px) { .ranks { grid-template-columns:1fr 1fr; } .ranks button.big { max-width:none; } }
+
+/* ================= motion and the base scene =================
+   Every animation ends on the plain look, so with reduced motion nothing is lost. */
+.tile { position:relative; }
+.delta { position:absolute; right:.5rem; top:-.9rem; z-index:2; font-size:1.05rem; font-weight:900; padding:.05rem .6rem; border:2px solid var(--ink); border-radius:99px; background:#fff; box-shadow:0 .15rem 0 var(--ink); pointer-events:none; animation:floatup 1.7s ease-out forwards; }
+.delta.up { background:var(--okbg); } .delta.down { background:var(--badbg); }
+@keyframes floatup { 0% { opacity:0; transform:translateY(.7rem) scale(.7); } 14% { opacity:1; transform:translateY(0) scale(1.08); } 24% { transform:scale(1); } 75% { opacity:1; transform:translateY(-.5rem); } 100% { opacity:0; transform:translateY(-1.3rem); } }
+
+/* stage: Kip in front of the live base */
+.stage { position:relative; margin:.8rem 0 .6rem; }
+.stage .sky { position:relative; height:13rem; border:var(--line); border-radius:var(--r); overflow:hidden; box-shadow:0 .28rem 0 var(--ink); background:#f2aa7d; }
+.stage svg.scene { position:absolute; inset:0; width:100%; height:100%; display:block; }
+.stage .kip { position:absolute; left:1.2rem; bottom:.5rem; width:6.2rem; z-index:1; }
+.stage .bubble { position:absolute; top:1rem; left:8.6rem; right:auto; max-width:min(36rem, calc(100% - 10rem)); margin:0; z-index:2; }
+.stage .bubble::before { bottom:auto; top:2.3rem; }
+.stage.intro .sky { height:22rem; }
+.stage.intro .kip { left:auto; right:2.4rem; width:8.6rem; bottom:.8rem; }
+.stage.intro .bubble { left:auto; right:12.4rem; top:auto; bottom:5.4rem; max-width:20rem; }
+.bubble.right::before { left:auto; right:-.62rem; top:auto; bottom:1.1rem; transform:rotate(225deg); }
+.htitle { position:absolute; left:1.8rem; top:1.4rem; z-index:2; color:#fff; }
+.htitle h1 { color:#fff; font-size:3.4rem; text-shadow:0 .22rem 0 var(--ink); animation:rise .8s cubic-bezier(.2,.9,.3,1.25) both; }
+.htitle h1 span { color:#ffc39f; }
+.htitle p { font-size:1.15rem; font-weight:800; color:#ffe7d6; margin-top:.2rem; animation:rise .8s .15s cubic-bezier(.2,.9,.3,1.25) both; }
+@keyframes rise { from { opacity:0; transform:translateY(1.2rem); } }
+
+/* kip: idle bob and a blink now and then */
+.kip svg { animation:bob 3.2s ease-in-out infinite; }
+@keyframes bob { 50% { transform:translateY(-.35rem); } }
+.kip .eyes { transform-box:fill-box; transform-origin:center; animation:blink 5.5s infinite; }
+@keyframes blink { 0%, 95%, 100% { transform:scaleY(1); } 97% { transform:scaleY(.12); } }
+.bubble.say { animation:say .5s cubic-bezier(.2,.9,.3,1.5); }
+@keyframes say { from { opacity:.3; transform:scale(.9) translateY(.3rem); } }
+
+/* scene parts */
+.scene .tw { animation:tw 3s ease-in-out infinite; }
+@keyframes tw { 50% { opacity:.2; } }
+.scene .sunglow { transform-box:fill-box; transform-origin:center; animation:glow 3.4s ease-in-out infinite; }
+@keyframes glow { 50% { transform:scale(1.1); } }
+.scene .flare .sunglow { animation:flareglow 1.5s ease-in-out infinite; }
+@keyframes flareglow { 0%, 100% { transform:scale(1); opacity:.85; } 50% { transform:scale(1.65); opacity:1; } }
+.scene .sunrise { animation:sunrise 5s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes sunrise { from { transform:translateY(70px); } }
+.scene .rain line { animation:rain .9s linear infinite; }
+@keyframes rain { from { transform:translate(0, 0); } to { transform:translate(-70px, 250px); } }
+.scene .haze ellipse { animation:drift 8s ease-in-out infinite alternate; }
+@keyframes drift { from { transform:translateX(-60px); } to { transform:translateX(80px); } }
+.scene .wave { animation:wave 1.8s ease-out infinite; }
+@keyframes wave { 0% { opacity:0; } 30% { opacity:1; } 100% { opacity:0; } }
+.scene .gl { animation:glint 3.6s ease-in-out infinite; }
+@keyframes glint { 0% { transform:translateX(0); } 60%, 100% { transform:translateX(260px); } }
+.scene .broke { animation:broke 1s ease-in-out infinite; }
+@keyframes broke { 50% { opacity:.45; } }
+.scene .bub { transform-box:fill-box; transform-origin:center; animation:bub 2.6s ease-in-out infinite; }
+@keyframes bub { 50% { transform:scale(1.04); fill-opacity:.28; } }
+.scene .ww { animation:dash 2.2s linear infinite; }
+@keyframes dash { to { stroke-dashoffset:-40; } }
+.scene .lit { animation:lit 4s ease-in-out infinite; }
+@keyframes lit { 50% { fill:#ffef9c; } }
+.scene .sprout { transform-box:fill-box; transform-origin:bottom; animation:sway 3s ease-in-out infinite; }
+@keyframes sway { 50% { transform:rotate(6deg); } }
+
+/* cards: dealt in, stamped when played, lift on hover */
+.cards.deal .card { animation:deal .6s cubic-bezier(.2,.9,.3,1.2) both; animation-delay:calc(var(--i, 0) * 110ms); }
+@keyframes deal { from { opacity:0; transform:translateY(2.4rem) rotate(-3deg) scale(.94); } }
+.card.justplayed { animation:stamp .55s cubic-bezier(.2,.9,.3,1.4); }
+@keyframes stamp { 40% { transform:scale(1.035) rotate(-.8deg); } }
+@media (hover:hover) {
+  .card { transition:transform .16s ease, box-shadow .16s ease; }
+  .card:not(.played):hover { transform:translateY(-.25rem); box-shadow:0 .55rem 0 var(--ink); }
+  button.rank { transition:transform .16s ease, box-shadow .16s ease; }
+  button.rank:not(:disabled):hover { transform:translateY(-.2rem); box-shadow:0 .5rem 0 var(--ink); }
+}
+
+/* morning report: events slide in on a new sol */
+.panel.enter .ev { animation:slidein .55s cubic-bezier(.2,.8,.2,1) both; animation-delay:calc(var(--i, 0) * 130ms + 120ms); }
+@keyframes slidein { from { opacity:0; transform:translateX(-1.4rem); } }
+
+/* sunset between sols */
+.dusk { position:fixed; inset:0; z-index:50; display:grid; place-items:center; padding:1rem; cursor:pointer; overflow:hidden;
+        background:linear-gradient(#1b2350 0%, #5b3a6b 45%, #e98a5c 100%); animation:duskin .45s ease-out both; }
+.dusk.out { animation:duskout .4s ease-in forwards; }
+@keyframes duskin { from { opacity:0; } }
+@keyframes duskout { to { opacity:0; } }
+.dusk .dsun { position:absolute; left:18%; top:58%; width:8rem; height:8rem; margin-left:-4rem; border-radius:50%;
+              background:radial-gradient(circle, #fff8e4 0 38%, #ffd88f 52%, rgba(255,216,143,0) 70%); box-shadow:0 0 5rem 2.5rem rgba(140,180,255,.38);
+              animation:sink 2.1s cubic-bezier(.4,0,.6,1) both; }
+@keyframes sink { from { transform:translateY(-16rem); } }
+.dusk .dground { position:absolute; left:-5%; right:-5%; bottom:0; height:32%; background:#5e3138; border-radius:50% 50% 0 0 / 30% 30% 0 0; }
+.dusk .dcard { position:relative; z-index:1; background:#fff; border:var(--line); border-radius:var(--r); box-shadow:0 .3rem 0 var(--ink); padding:1rem 1.5rem 1.1rem; text-align:center; max-width:34rem; animation:pop .5s .12s cubic-bezier(.2,.9,.3,1.35) both; }
+@keyframes pop { from { opacity:0; transform:scale(.85) translateY(1rem); } }
+.dusk .dsol { font-size:1.7rem; font-weight:900; }
+.dusk .dchips { display:flex; flex-wrap:wrap; justify-content:center; gap:.5rem; margin:.6rem 0; }
+.dusk .dchips span { background:#eef2fd; border:2px solid var(--ink); border-radius:99px; padding:.15rem .8rem; font-weight:900; font-size:1.15rem; animation:pop .45s cubic-bezier(.2,.9,.3,1.35) both; }
+.dusk .dchips span:nth-child(1) { animation-delay:.35s; } .dusk .dchips span:nth-child(2) { animation-delay:.47s; } .dusk .dchips span:nth-child(3) { animation-delay:.59s; }
+.dusk .dnote { color:var(--ink2); font-size:.95rem; }
+.dusk .dnext { font-weight:800; margin-top:.5rem; animation:rise .5s .8s both; }
+.dusk .dskip { font-size:.8rem; color:var(--ink2); margin-top:.3rem; }
+
+/* debrief */
+.chart polyline.draw { stroke-dasharray:1; stroke-dashoffset:0; animation:draw 1.8s .25s cubic-bezier(.4,0,.2,1) backwards; }
+@keyframes draw { from { stroke-dashoffset:1; } }
+.end .stars { animation:pop .6s .3s cubic-bezier(.2,.9,.3,1.5) both; }
+.end .stat { animation:rise .55s cubic-bezier(.2,.9,.3,1.2) both; }
+.end .stat:nth-child(2) { animation-delay:.08s; } .end .stat:nth-child(3) { animation-delay:.16s; } .end .stat:nth-child(4) { animation-delay:.24s; }
+.words { animation:rise .45s cubic-bezier(.2,.9,.3,1.2) both; }
+
+@media (max-width:700px) {
+  .stage .sky { height:9.5rem; }
+  .stage .kip { width:4.6rem; left:.7rem; }
+  .stage .bubble { position:relative; top:auto; left:auto; max-width:none; margin-top:.9rem; }
+  .stage .bubble::before { left:1.8rem; top:-.62rem; transform:rotate(135deg); }
+  .stage.intro .sky { height:15rem; }
+  .stage.intro .kip { width:5.4rem; right:1rem; }
+  .stage.intro .bubble { right:auto; bottom:auto; }
+  .bubble.right::before { right:auto; left:1.8rem; top:-.62rem; bottom:auto; transform:rotate(135deg); }
+  .htitle { left:1rem; top:1rem; } .htitle h1 { font-size:2.4rem; }
+}
+@media (prefers-reduced-motion:reduce) { * { animation:none !important; transition:none !important; } }

@@ -752,13 +752,23 @@ function createEngine(data) {
     return m ? Number(m[1]) : Math.floor(Math.random() * 4294967296);
   }
   var rank = (/[?&]level=(cadet|commander)\b/.exec(location.search) || [])[1] || 'cadet';   // Cadet unless chosen
-  function start(level) { markShown(); if (typeof level === 'string') { rank = level; } state = E.newGame(newSeed(), { level: rank }); screen = 'game'; render(); window.scrollTo(0, 0); }
+  function start(level) { markShown(); if (typeof level === 'string') { rank = level; } state = E.newGame(newSeed(), { level: rank }); fx = { from: {}, d: {}, newSol: true }; screen = 'game'; render(); window.scrollTo(0, 0); }
   function rankBtn(level, title, sub) {
     var wait = feed === 'checking';
     return h('button', { class: 'big rank' + (level === 'cadet' ? '' : ' quiet'), disabled: wait, onclick: function () { start(level); } },
       [h('b', { str: title }), h('span', { class: 'sub', str: wait ? 'Contacting NASA...' : sub })]);
   }
-  function act(fn) { markShown(); state = fn(state); if (state.phase === 'won' || state.phase === 'lost') { screen = 'end'; } render(); if (screen === 'end' || state.phase === 'morning') { window.scrollTo(0, 0); } }
+  function act(fn) {
+    if (busy) { return; }
+    markShown();
+    var before = state, after = fn(state);
+    function go() {
+      busy = false; state = after; fx = diffFx(before, after);
+      if (state.phase === 'won' || state.phase === 'lost') { screen = 'end'; }
+      render(); if (screen === 'end' || state.phase === 'morning') { window.scrollTo(0, 0); }
+    }
+    if (fn === E.endSol) { busy = true; sunset(after, go); } else { go(); }
+  }
 
   /* ---- where the space weather came from ---- */
   function runLabel() {                  // never says "live" unless the live fetch worked
@@ -825,13 +835,137 @@ function createEngine(data) {
       '<line x1="50" y1="11" x2="50" y2="0" ' + st + '/><circle cx="50" cy="-3" r="5.5" fill="#ffc623" ' + st + '/>' +
       '<ellipse cx="50" cy="44" rx="37" ry="35" fill="#fff" ' + st + '/>' +
       '<circle cx="27" cy="23" r="3.2" fill="#cfd9f5"/><circle cx="70" cy="19" r="2.4" fill="#cfd9f5"/><circle cx="77" cy="31" r="3.4" fill="#cfd9f5"/>' +
-      '<rect x="19" y="31" width="62" height="37" rx="18.5" fill="' + INK + '"/><ellipse cx="31" cy="38.5" rx="7" ry="3" fill="#fff" opacity=".55" transform="rotate(-20 31 38.5)"/>' + face + '</svg>';
+      '<rect x="19" y="31" width="62" height="37" rx="18.5" fill="' + INK + '"/><ellipse cx="31" cy="38.5" rx="7" ry="3" fill="#fff" opacity=".55" transform="rotate(-20 31 38.5)"/><g class="eyes">' + face + '</g></svg>';
   }
   function guide(mood, text, big) {
     var k = h('span', { class: 'kip', 'aria-hidden': 'true' });
     k.innerHTML = kipSvg(mood, state ? E.levels(state) : null);          // static strings only, nothing from the player or the network
     return h('div', { class: 'guide mood-' + mood + (big ? ' big-kip' : '') }, [k,
       h('div', { class: 'bubble', 'aria-live': 'polite' }, [h('b', { class: 'who', str: 'Kip, your guide' }), h('span', { text: text })])]);
+  }
+
+  /* ---- motion: what changed since the last action, so only real changes animate ---- */
+  var fx = null, fxNow = null, busy = false;
+  function reduced() { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
+  function diffFx(a, b) {
+    var f = { from: { ls: a.ls, power: a.power, shield: a.shield }, d: {}, newSol: a.sol !== b.sol, dealt: a.phase === 'morning' && b.phase === 'plan',
+              played: b.picks.length > a.picks.length && a.sol === b.sol ? b.picks[b.picks.length - 1] : null };
+    ['ls', 'power', 'shield'].forEach(function (k) { var d = Math.round((b[k] - a[k]) * 100) / 100; if (d) { f.d[k] = d; } });
+    try { f.say = b.phase !== 'won' && b.phase !== 'lost' && E.hint(a).text !== E.hint(b).text; } catch (err) { f.say = false; }
+    return f;
+  }
+  function shownVal(k, v) { return k === 'shield' ? (v > 0 ? Math.max(0.1, Math.round(v * 10) / 10) : 0) : Math.round(v); }
+  function pctOf(k, v) { return v > 0 ? Math.max(3, Math.min(100, v / T.max[k] * 100)) : 0; }
+  function countUp(el, k, from, to) {
+    var t0 = null, dur = 650;
+    function step(t) {
+      if (!t0) { t0 = t; }
+      var p = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - p, 3), v = from + (to - from) * e;
+      el.textContent = shownVal(k, v) + (k === 'ls' ? '%' : '');
+      if (p < 1) { requestAnimationFrame(step); }
+    }
+    requestAnimationFrame(step);
+  }
+  function runFx(f) {
+    if (!f || reduced() || screen !== 'game') { return; }
+    Object.keys(f.d).forEach(function (k) {
+      var t = app.querySelector('.hud .k-' + k); if (!t) { return; }
+      var num = t.querySelector('.num'), fill = t.querySelector('.fill'), d = f.d[k];
+      fill.style.transition = 'none'; fill.style.width = pctOf(k, f.from[k]) + '%'; void fill.offsetWidth;
+      fill.style.transition = ''; fill.style.width = pctOf(k, state[k]) + '%';
+      countUp(num, k, f.from[k], state[k]);
+      var chip = document.createElement('span');
+      chip.className = 'delta ' + (d > 0 ? 'up' : 'down');
+      chip.textContent = sign(k === 'shield' ? Math.round(d * 100) / 100 : Math.round(d)) + (k === 'ls' ? '%' : k === 'power' ? ' kWh' : ' mSv');
+      chip.setAttribute('aria-hidden', 'true');
+      t.appendChild(chip);
+      setTimeout(function () { if (chip.parentNode) { chip.parentNode.removeChild(chip); } }, 1800);
+    });
+  }
+
+  /* ---- sunset: a short dusk card between sols (tap to skip; skipped with reduced motion) ---- */
+  function sunset(after, done) {
+    var L = after.lastSunset, end = after.phase === 'won' || after.phase === 'lost';
+    if (reduced() || !L) { done(); return; }
+    var finished = false, timer;
+    function finish() {
+      if (finished) { return; } finished = true; clearTimeout(timer);
+      ov.classList.add('out'); done();
+      setTimeout(function () { if (ov.parentNode) { ov.parentNode.removeChild(ov); } }, 420);
+    }
+    var ov = h('div', { class: 'dusk', role: 'status' }, [
+      h('div', { class: 'dsun', 'aria-hidden': 'true' }),
+      h('div', { class: 'dground', 'aria-hidden': 'true' }),
+      h('div', { class: 'dcard' }, [
+        h('p', { class: 'dsol', str: '🌅 Sunset on sol ' + L.sol }),
+        h('div', { class: 'dchips' }, [h('span', { str: '💨 ' + sign(L.dLs) + '%' }), h('span', { str: '⚡ ' + sign(L.dPower) + ' kWh' }), h('span', { str: '🛡️ ' + sign(L.dShield) + ' mSv' })]),
+        L.notes.length ? h('p', { class: 'dnote', text: L.notes.join('. ') + '.' }) : null,
+        h('p', { class: 'dnext', str: end ? 'The mission is over. Let us see how it went…' : 'Sol ' + after.sol + ' begins…' }),
+        h('p', { class: 'dskip', str: 'Tap to skip' })
+      ])
+    ]);
+    ov.onclick = finish;
+    document.body.appendChild(ov);
+    timer = setTimeout(finish, 2100);
+  }
+
+  /* ---- the base scene: an svg of Jezero that shows today's events and what you built ---- */
+  function sceneSvg(s, hero) {
+    var e = s ? s.schedule[Math.min(s.sol, T.sols) - 1] : null, live = s && s.phase !== 'won' && s.phase !== 'lost';
+    var storm = live && !!e.storm, dust = live && e.dust > 0, flare = live && !!e.flare, conj = live && !!e.conjunction;
+    var fails = s ? s.failures : [], o = [], i, x, sky, far, near, seed = 7;
+    function rnd() { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; }
+    sky = hero ? ['#1b2350', '#f29a6c'] : dust ? ['#caa07e', '#a2704f'] : storm ? ['#e8c8ef', '#f2a67c'] : ['#f7dcbc', '#f2aa7d'];
+    far = hero ? '#8a4b4c' : dust ? '#a4704f' : '#e6976b'; near = hero ? '#5e3138' : dust ? '#8c5a3f' : '#c9643b';
+    o.push('<defs><linearGradient id="skyg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="' + sky[0] + '"/><stop offset="1" stop-color="' + sky[1] + '"/></linearGradient>' +
+      '<radialGradient id="sung"><stop offset="0" stop-color="#fff8e1"/><stop offset=".4" stop-color="#ffefc2" stop-opacity=".75"/><stop offset="1" stop-color="#ffefc2" stop-opacity="0"/></radialGradient>' +
+      '<linearGradient id="glint" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".8"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>' +
+      '<clipPath id="pclip"><polygon points="596,150 650,150 662,122 608,122"/><polygon points="664,150 718,150 730,122 676,122"/><polygon points="732,150 786,150 798,122 744,122"/></clipPath></defs>');
+    o.push('<rect width="1000" height="200" fill="url(#skyg)"/>');
+    if (hero) { for (i = 0; i < 34; i++) { o.push('<circle class="tw" cx="' + Math.round(rnd() * 1000) + '" cy="' + Math.round(rnd() * 95) + '" r="' + (1 + Math.round(rnd() * 2)) + '" fill="#fff" style="animation-delay:-' + (rnd() * 3).toFixed(2) + 's"/>'); } }
+    var sx = hero ? 600 : 850, sy = hero ? 104 : 54;
+    o.push('<g class="sun' + (flare ? ' flare' : '') + (hero ? ' sunrise' : '') + '"><circle class="sunglow" cx="' + sx + '" cy="' + sy + '" r="' + (flare ? 70 : 52) + '" fill="url(#sung)"/><circle cx="' + sx + '" cy="' + sy + '" r="20" fill="#fff6dc"/></g>');
+    o.push('<path d="M0 132 C120 104 230 124 340 114 C460 102 570 128 690 116 C810 104 910 124 1000 112 L1000 200 L0 200Z" fill="' + far + '"/>');
+    o.push('<path d="M0 158 C160 146 300 160 460 154 C610 148 770 162 1000 150 L1000 200 L0 200Z" fill="' + near + '"/>');
+    for (i = 0; i < 14; i++) { o.push('<ellipse cx="' + Math.round(rnd() * 1000) + '" cy="' + (166 + Math.round(rnd() * 28)) + '" rx="' + (3 + Math.round(rnd() * 6)) + '" ry="2.5" fill="#00000022"/>'); }
+    if (!hero) {
+      // habitat dome, with what the crew built
+      if (s.shelterToday) { o.push('<ellipse class="bub" cx="330" cy="140" rx="96" ry="78" fill="#7447ff" fill-opacity=".18" stroke="#7447ff" stroke-width="3"/>'); }
+      o.push('<path d="M262 160 A68 58 0 0 1 398 160 Z" fill="#fbfcff" stroke="#17224d" stroke-width="4" stroke-linejoin="round"/>');
+      if (s.roofBuilt) { o.push('<path d="M270 148 A60 50 0 0 1 390 148" fill="none" stroke="#8a5236" stroke-width="13" stroke-linecap="round"/><path d="M270 148 A60 50 0 0 1 390 148" fill="none" stroke="#a96a44" stroke-width="4" stroke-dasharray="3 9" stroke-linecap="round"/>'); }
+      o.push('<circle class="lit" cx="300" cy="140" r="6" fill="#ffd76a" stroke="#17224d" stroke-width="2"/><circle class="lit" cx="360" cy="140" r="6" fill="#ffd76a" stroke="#17224d" stroke-width="2" style="animation-delay:-1.5s"/><rect x="318" y="138" width="24" height="22" rx="7" fill="#ff7a3d" stroke="#17224d" stroke-width="3"/>');
+      if (s.wallArmed) { o.push('<ellipse class="ww" cx="330" cy="150" rx="86" ry="66" fill="none" stroke="#1d9bf0" stroke-width="5" stroke-dasharray="12 8"/>'); }
+      // recycler and greenhouse
+      o.push('<g' + (fails.indexOf('recycler') >= 0 ? ' class="broke"' : '') + '><rect x="410" y="134" width="48" height="26" rx="7" fill="' + (fails.indexOf('recycler') >= 0 ? '#ffd0d2' : '#fbfcff') + '" stroke="#17224d" stroke-width="3"/><path d="M424 147 a10 10 0 1 1 10 10" fill="none" stroke="#0b8a4f" stroke-width="3.5" stroke-linecap="round"/><path d="M430 154 l5 3 -5 3" fill="none" stroke="#0b8a4f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></g>');
+      o.push('<path d="M474 160 A42 34 0 0 1 558 160 Z" fill="#d9f7e6" stroke="#17224d" stroke-width="3.5"/>');
+      for (i = 0; i < Math.min(s.harvests, 5); i++) { x = 492 + i * 12; o.push('<g class="sprout" style="animation-delay:' + (i * 0.2) + 's"><path d="M' + x + ' 159 v-12" stroke="#0b8a4f" stroke-width="3" stroke-linecap="round"/><ellipse cx="' + (x + 4) + '" cy="148" rx="4" ry="2.5" fill="#0b8a4f"/></g>'); }
+      // solar panels
+      var pfill = dust ? '#7d6450' : '#22408f', pb = fails.indexOf('panel') >= 0;
+      o.push('<g stroke="#17224d" stroke-width="3" stroke-linejoin="round"><line x1="623" y1="150" x2="623" y2="162"/><line x1="691" y1="150" x2="691" y2="162"/><line x1="759" y1="150" x2="759" y2="162"/>' +
+        '<polygon points="596,150 650,150 662,122 608,122" fill="' + pfill + '"/><polygon points="664,150 718,150 730,122 676,122" fill="' + pfill + '"/>' +
+        '<polygon' + (pb ? ' class="broke"' : '') + ' points="732,150 786,150 798,122 744,122" fill="' + (pb ? '#e0262d' : pfill) + '"/></g>');
+      if (s.panelsClean && !dust) { o.push('<g clip-path="url(#pclip)"><rect class="gl" x="560" y="118" width="60" height="40" fill="url(#glint)"/></g>'); }
+      // radio dish: waves out to Earth, or blocked behind the Sun
+      o.push('<g stroke="#17224d" stroke-width="3" stroke-linecap="round"><line x1="880" y1="162" x2="880" y2="132"/><path d="M858 112 A26 26 0 0 0 902 140" fill="#fbfcff" stroke-linejoin="round"/></g>');
+      if (conj) { o.push('<g stroke="#e0262d" stroke-width="5" stroke-linecap="round"><circle cx="918" cy="96" r="16" fill="#fff" fill-opacity=".85"/><line x1="907" y1="85" x2="929" y2="107"/></g>'); }
+      else { for (i = 0; i < 3; i++) { o.push('<path class="wave" style="animation-delay:' + (i * 0.6) + 's" d="M' + (900 + i * 10) + ' ' + (104 - i * 8) + ' a' + (12 + i * 10) + ' ' + (12 + i * 10) + ' 0 0 1 ' + (10 + i * 6) + ' ' + (16 + i * 6) + '" fill="none" stroke="#17224d" stroke-width="3" stroke-linecap="round"/>'); } }
+    }
+    if (dust) { o.push('<g class="haze"><rect width="1000" height="200" fill="#8b5a3c" fill-opacity=".28"/><ellipse cx="200" cy="120" rx="260" ry="40" fill="#b07a55" fill-opacity=".35"/><ellipse cx="700" cy="90" rx="300" ry="34" fill="#b07a55" fill-opacity=".3" style="animation-delay:-4s"/></g>'); }
+    if (storm) { o.push('<g class="rain">'); for (i = 0; i < 20; i++) { x = 20 + i * 52 + Math.round(rnd() * 20); o.push('<line x1="' + x + '" y1="-40" x2="' + (x - 22) + '" y2="0" stroke="' + (i % 2 ? '#9b4dff' : '#e0262d') + '" stroke-width="4" stroke-linecap="round" stroke-opacity=".75" style="animation-delay:-' + (rnd() * 0.9).toFixed(2) + 's"/>'); } o.push('</g>'); }
+    return '<svg class="scene" viewBox="0 0 1000 200" preserveAspectRatio="xMidYMax slice" xmlns="http://www.w3.org/2000/svg" focusable="false">' + o.join('') + '</svg>';
+  }
+  function stage(mood, text) {             // Kip stands in front of the live base scene
+    var sky = h('div', { class: 'sky', 'aria-hidden': 'true' }), k = h('span', { class: 'kip', 'aria-hidden': 'true' });
+    sky.innerHTML = sceneSvg(state, false); k.innerHTML = kipSvg(mood, E.levels(state)); sky.appendChild(k);
+    return h('div', { class: 'stage mood-' + mood }, [sky,
+      h('div', { class: 'bubble' + (fxNow && fxNow.say ? ' say' : ''), 'aria-live': 'polite' }, [h('b', { class: 'who', str: 'Kip, your guide' }), h('span', { text: text })])]);
+  }
+  function heroStage() {
+    var sky = h('div', { class: 'sky', 'aria-hidden': 'true' }), k = h('span', { class: 'kip', 'aria-hidden': 'true' });
+    sky.innerHTML = sceneSvg(null, true); k.innerHTML = kipSvg('happy', null); sky.appendChild(k);
+    return h('div', { class: 'stage intro mood-happy' }, [sky,
+      h('div', { class: 'htitle' }, [h('h1', {}, ['🪐 Outpost ', h('span', { str: '30' })]), h('p', { str: 'Junior Astronaut Mission Trainer' })]),
+      h('div', { class: 'bubble right' }, [h('b', { class: 'who', str: 'Kip, your guide' }), h('span', { str: 'Hi, I am Kip! I will help you keep the base alive.' })])]);
   }
 
   /* ---- bars: icon + number + bar + a word when it gets low ---- */
@@ -875,7 +1009,7 @@ function createEngine(data) {
     return h('div', { class: 'ev ' + it.kind }, kids);
   }
   function reportPanel() {
-    var items = E.report(state), kids = [h('h2', { str: 'Morning report' })];
+    var items = E.report(state), kids = [h('h2', { str: 'Morning report' })], enter = fxNow && fxNow.newSol;
     if (state.lastSunset && state.sol > 1) {
       var L = state.lastSunset;
       kids.push(h('div', { class: 'lastsun' }, [h('span', { class: 'dim', str: 'Last sunset:' }),
@@ -883,7 +1017,7 @@ function createEngine(data) {
       if (L.notes.length) { kids.push(h('p', { class: 'dim', text: L.notes.join('. ') + '.' })); }
     }
     if (!items.length) { kids.push(h('p', { str: 'A quiet morning. Nothing special in the sky today.' })); }
-    items.forEach(function (it) { kids.push(evItem(it)); });
+    items.forEach(function (it, n) { var el = evItem(it); el.style.setProperty('--i', n); kids.push(el); });
     var fc = E.forecast(state);
     if (fc.length) {
       kids.push(h('h2', { str: '📡 Message from Earth' }));
@@ -893,7 +1027,7 @@ function createEngine(data) {
         f.items.forEach(function (it) { kids.push(evItem(it, true)); });
       });
     }
-    return h('div', { class: 'panel' }, kids);
+    return h('div', { class: 'panel' + (enter ? ' enter' : '') }, kids);
   }
 
   /* ---- cards ---- */
@@ -907,7 +1041,7 @@ function createEngine(data) {
       v.reason ? h('div', { class: 'why', str: '⚠ ' + v.reason }) : null,
       h('button', { disabled: v.played || !v.canPlay, onclick: function () { act(function (s) { return E.playCard(s, v.id); }); }, str: v.played ? 'Played ✓' : 'Play this card' })
     ];
-    return h('div', { class: 'card' + (v.played ? ' played' : '') }, kids);
+    return h('div', { class: 'card' + (v.played ? ' played' : '') + (fxNow && fxNow.played === v.id ? ' justplayed' : '') }, kids);
   }
   function logPanel() {
     var mine = state.log.filter(function (l) { return l.sol === state.sol; });
@@ -941,7 +1075,7 @@ function createEngine(data) {
     keys.forEach(function (k) {
       var pts = [X(0) + ',' + Y(pct(T.start[k], k))];
       for (i = 0; i < n; i++) { pts.push(X(i + 1) + ',' + Y(pct(Hs[i][k], k))); }
-      out += '<polyline points="' + pts.join(' ') + '" fill="none" stroke="' + LINE[k] + '" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/>';
+      out += '<polyline points="' + pts.join(' ') + '" class="draw" pathLength="1" fill="none" stroke="' + LINE[k] + '" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/>';
       ends.push({ k: k, y: Y(pct(state[k], k)) });
     });
     ends.sort(function (a, b) { return a.y - b.y; });
@@ -959,7 +1093,7 @@ function createEngine(data) {
   /* ---- screens ---- */
   function startScreen() {
     return h('div', {}, [
-      h('div', { class: 'hero' }, [h('div', { class: 'ttl' }, [h('h1', {}, ['🪐 Outpost ', h('span', { str: '30' })]), h('p', { class: 'dim', str: 'Junior Astronaut Mission Trainer' })]), guide('happy', 'Hi, I am Kip! I will help you keep the base alive.', true)]),
+      heroStage(),
       wordsHolder,
       h('div', { class: 'panel' }, [
         h('h2', { str: 'Your mission' }),
@@ -990,7 +1124,7 @@ function createEngine(data) {
     } else {
       var left = state.required - state.picks.length;
       act2.push(h('h2', { class: 'pick', str: state.phase === 'plan' ? 'Pick ' + left + ' card' + (left > 1 ? 's' : '') + '. No skipping!' : 'Cards played. Ready for sunset!' }));
-      act2.push(h('div', { class: 'cards' }, E.cardViews(state).map(cardEl)));
+      act2.push(h('div', { class: 'cards' + (fxNow && fxNow.dealt ? ' deal' : '') }, E.cardViews(state).map(function (v, n) { var c = cardEl(v); c.style.setProperty('--i', n); return c; })));
       act2.push(logPanel());
       if (state.phase === 'sunsetReady') { act2.push(h('button', { class: 'big', onclick: function () { act(E.endSol); }, str: '🌅 Sunset: end the sol' })); }
     }
@@ -1001,7 +1135,7 @@ function createEngine(data) {
         h('div', { class: 'dim', str: 'Real NASA day ' + e.date + (DATA.meta.mode === 'live' ? ' (last 30 days)' : ' (archive, not live)') })
       ]),
       h('div', { class: 'solbar', 'aria-hidden': 'true' }, [h('i', { style: 'width:' + (state.sol - 1) / T.sols * 100 + '%' })]),
-      hud(true), goalsRow(), guide(g.mood, g.text), wordsHolder,
+      hud(true), goalsRow(), stage(g.mood, g.text), wordsHolder,
       h('div', { class: 'play' }, [h('div', {}, [reportPanel()]), h('div', { class: 'act' }, act2)]),
       footer()
     ]);
@@ -1083,10 +1217,12 @@ function createEngine(data) {
   }
 
   function render() {
+    fxNow = fx; fx = null;
     found = []; wordsHolder = h('div', {});
     app.textContent = '';
     app.appendChild(screen === 'start' ? startScreen() : screen === 'end' ? endScreen() : screen === 'sources' ? sourcesScreen() : gameScreen());
     if (screen !== 'sources') { var wp = wordsPanel(); if (wp) { wordsHolder.appendChild(wp); } } else { shownWords = []; }
+    runFx(fxNow);
   }
   loadLive().then(function (live) {
     try {
