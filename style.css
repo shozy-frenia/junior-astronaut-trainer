@@ -149,3 +149,11 @@ footer { margin:1.4rem 0 2.4rem; }
 }
 @media (max-width:420px) { .tile .num { font-size:1.9rem; } .tile .ico { font-size:1.4rem; } .kip { width:4.4rem; } }
 @media (prefers-reduced-motion:reduce) { * { animation:none !important; transition:none !important; } }
+
+/* rank picker, rank chip, debrief chart */
+.ranks { display:grid; grid-template-columns:1fr; gap:.2rem 1rem; }
+button.rank { display:flex; flex-direction:column; align-items:center; gap:.15rem; padding:.6rem 1rem; }
+button.rank .sub { font-size:.95rem; font-weight:700; }
+.rankchip { font-size:.9rem; font-weight:800; background:#fff; border:2px solid var(--ink); border-radius:99px; padding:.1rem .7rem; }
+.chart svg { display:block; width:100%; height:auto; margin:.3rem 0; }
+@media (min-width:900px) { .ranks { grid-template-columns:1fr 1fr; } .ranks button.big { max-width:none; } }

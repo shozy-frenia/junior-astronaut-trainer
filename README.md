@@ -7,14 +7,31 @@ Outpost 30 is a browser card game for kids aged 7–12, built for the NASA Space
 ## How to play
 
 1. Open the game (link above, or open `index.html` in any browser; it works offline).
-2. **Read the morning report.** It shows today's real space weather, dust storms and broken machines.
-3. **Pick 2 of your 3 cards.** No skipping, and no card is free.
-4. **Press sunset.** The base uses air, power and Shield, then the next sol starts.
-5. **Win:** reach sol 30 with all three bars above 0, plus ⭐ 3 science stars and 🌱 5 harvests. Keep at least 4 mSv of Shield for 3 stars.
+2. **Pick your rank.** 🧑‍🚀 Cadet is for first missions: air lasts longer. 🚀 Commander is the full challenge.
+3. **Read the morning report.** It shows today's real space weather, dust storms and broken machines.
+4. **Pick 2 of your 3 cards.** No skipping, and no card is free.
+5. **Press sunset.** The base uses air, power and Shield, then the next sol starts.
+6. **Win:** reach sol 30 with all three bars above 0, plus ⭐ 3 science stars and 🌱 5 harvests. Keep at least 4 mSv of Shield for 3 stars.
 
-Tips: tap any dotted word (sol, mSv, CME...) for a one-sentence explanation. Kip, your guide, gives hints. Add `?seed=123` to the URL to replay the same mission.
+After the mission, the debrief shows a sol-by-sol chart of your three bars, replays your game to find the 3 choices that mattered most, and compares your radiation dose with real Mars and space station measurements.
 
-Files: `index.html` (game engine and UI), `data.js` (all real data, each value with source URL and retrieval date), `style.css`, `SOURCES.md` (full source notes and caveats). Plain HTML/CSS/JS, no build step, no accounts.
+Tips: tap any dotted word (sol, mSv, CME...) for a one-sentence explanation. Kip, your guide, gives hints. For a class, add `?seed=123&level=cadet` to the URL so everyone plays the same mission.
+
+Files: `index.html` (game engine and UI), `data.js` (all real data, each value with source URL and retrieval date), `style.css`, `SOURCES.md` (full source notes and caveats), `tools/` (test and balance simulators, run with Node). Plain HTML/CSS/JS, no build step, no accounts.
+
+## Tested: every choice costs something
+
+`tools/balance.js` plays the real game engine 1,000 times per strategy on the same seeds. The bots see only what a player sees. No one-card habit wins, so there is no free safe choice.
+
+| Strategy | Cadet wins | Commander wins |
+|---|---|---|
+| Smart planner | 88.2% | 63.3% |
+| Random cards | 25.6% | 3.2% |
+| Always shield | 21.8% | 2.1% |
+| Always save power | 12.7% | 0.5% |
+| Always science | 6.6% | 0.0% |
+
+Run it: `node tools/balance.js index.html data.js --level cadet` (or `commander`). `node tools/sim.js index.html data.js` checks the rules, the data and that the same seed always gives the same game.
 
 ## Datasets used
 
@@ -26,6 +43,7 @@ All saved data was retrieved on **2026-11-14** and is an archive, not live. Only
 | [NASA JPL Horizons](https://ssd.jpl.nasa.gov/api/horizons.api) | Earth–Mars radio delay on the Call Earth card |
 | Curiosity RAD radiation on Mars ([SwRI release](https://swri.org/node/9079), [2017 storm](https://www.swri.org/newsroom/press-releases/large-solar-storm-sparks-global-aurora-doubles-radiation-levels-mars)) | Daily dose of 0.67 mSv per sol, Forbush dip, debrief comparison |
 | [NASA OSDR RadLab](https://visualization.osdr.nasa.gov/radlab/) | ISS astronaut dose for the debrief comparison |
+| [Perseverance MEDA weather](https://www.nasa.gov/directorates/stmd/nasas-first-weather-report-from-jezero-crater-on-mars/) | Real Jezero day and night temperatures on the start screen |
 | [NASA OSDR](https://osdr.nasa.gov/bio/repo/data/studies/OSD-342) (OSD-342, OSD-684, OSD-530, Inspiration4 OSD-569/570/571/575) and [Barger et al. 2014](https://pmc.ncbi.nlm.nih.gov/articles/PMC4188436) | Real astronaut-health facts on the Lab experiment card and in the debrief |
 | [Mars Fact Sheet](https://nssdc.gsfc.nasa.gov/planetary/factsheet/marsfact.html), [Earth Fact Sheet](https://nssdc.gsfc.nasa.gov/planetary/factsheet/earthfact.html) | Sol length; Mars sunlight (about 43% of Earth's) behind the solar power numbers |
 | [NASA MOXIE](https://www.nasa.gov/missions/mars-2020-perseverance/perseverance-rover/nasas-oxygen-generating-experiment-moxie-completes-mars-mission/) | MOXIE oxygen maker card |

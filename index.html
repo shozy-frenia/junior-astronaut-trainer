@@ -37,8 +37,10 @@ function createEngine(data) {
     dust: { earliest: 5, latest: 22, length: 3, solarFactor: 0.5 },   // [T]
     failures: { min: 1, max: 2, earliest: 3, latest: 26, recyclerExtraLs: 5, panelPower: 10 }, // [T]
     conjunctionSols: 4,                                               // [T] (real one lasted about 2.5 weeks)
-    goals: { stars: 3, harvests: 5, shieldFor3Stars: 4 }              // [T] was 5; with Shield 20 that was almost unreachable
+    goals: { stars: 3, harvests: 5, shieldFor3Stars: 4 },             // [T] was 5; with Shield 20 that was almost unreachable
+    levels: { cadet: { lsPerSol: 3 }, commander: {} }                 // [T] Cadet: air drains slower, for first missions (balance.js --level cadet)
   };
+  function tuned(s, k) { var o = TUNING.levels[s.level] || {}; return k in o ? o[k] : TUNING[k]; }   // a level's value, else the default
 
   /* ---------- small helpers ---------- */
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
@@ -160,7 +162,7 @@ function createEngine(data) {
       fx: function (s) { s.panelsClean = true; return 'Panels are shiny. More power every sol (until dust comes back).'; },
       anchor: function () { var a = data.anchors.opportunity.dustTau; return fact(a, a.kid); } },
     { id: 'call', icon: '📡', name: 'Call Earth', text: 'Ask Mission Control what is coming. Radio messages need time to travel.',
-      cost: { power: 5 }, extraCost: 'you wait for the reply', gain: {}, extraGain: "see the next 2 sols' events",   // [T] the radio uses power
+      cost: { power: 5 }, gain: {}, extraGain: "see the next 2 sols' events",   // [T] the radio uses power
       ok: function (s) { return s.sol < TUNING.sols; },                                                                          // never dealt on the last sol
       fx: function (s) {
         var d = ev(s).light, sols = [];
@@ -267,6 +269,7 @@ function createEngine(data) {
     var startOffset = opts.windowStart ? diffDays(first, opts.windowStart) : rint(s, 0, span - T.sols);
     if (startOffset < 0 || startOffset > span - T.sols) { throw new Error('windowStart outside the archive'); }
     s.windowStart = addDays(first, startOffset); s.windowOpt = opts.windowStart || null;
+    s.level = TUNING.levels[opts.level] ? opts.level : 'commander';
     s.schedule = buildSchedule(s, s.windowStart);
     s.ls = T.start.ls; s.power = T.start.power; s.shield = T.start.shield;
     s.stars = 0; s.harvests = 0;
@@ -351,7 +354,7 @@ function createEngine(data) {
     var T = TUNING, s = clone(state), e = ev(s), notes = [], before = { ls: s.ls, power: s.power, shield: s.shield };
 
     /* life support */
-    var dLs = -T.lsPerSol;
+    var dLs = -tuned(s, 'lsPerSol');
     if (s.failures.indexOf('recycler') >= 0) { dLs -= T.failures.recyclerExtraLs; notes.push('Broken recycler: −' + T.failures.recyclerExtraLs + '% extra'); }
     if (s.bonusDue) { dLs += s.bonusDue; notes.push('Plants made +' + s.bonusDue + '% air'); }
     s.bonusDue = s.bonusNext; s.bonusNext = 0;
@@ -427,14 +430,14 @@ function createEngine(data) {
     if (e.conjunction) {
       var cj = data.anchors.solarConjunction2026.nasaMaven;
       out.push({ kind: 'conj', icon: '📡', title: 'Mars is behind the Sun', real: true, link: cj.url,
-        text: 'This is called solar conjunction. The Sun blocks our radio for about two weeks in real life; in this game Call Earth is blocked for ' + T.conjunctionSols + ' sols (day ' + e.conjunction + ').',
-        stamp: 'Really happened ' + cj.value + ' (NASA). Replayed, not live.',
+        text: 'This is called solar conjunction. No radio gets through, so Call Earth is blocked (day ' + e.conjunction + ' of ' + T.conjunctionSols + ').',
+        stamp: 'Really happened ' + cj.value + ' (NASA), for about two weeks. Replayed, not live.',
         source: fromCopy(cj, 'Real: NASA says no mission could reach Mars on these dates. The game blocks Call Earth for ' + T.conjunctionSols + ' sols.') });
     }
     if (e.flare) {
       var pc = Math.round((T.flareStormChance[e.flare.letter] || 0) * 100);
       out.push({ kind: 'flare', icon: '☀️', title: 'Solar flare ' + e.flare.cls, real: true, link: e.flare.link,
-        text: 'The Sun flashed. The flash itself cannot get through Mars air, so it is only a warning. Chance of a particle storm on the next sol: ' + pc + '%.',
+        text: 'The Sun flashed. Mars air blocks the flash, so it is a warning. Chance of a particle storm next sol: ' + pc + '%.',
         stamp: 'Really happened on ' + dateOf(e.flare.time) + '. ' + replayNote() + ' The ' + pc + '% chance is a game number.',
         source: fromFeed('NASA DONKI: solar flare ' + e.flare.cls, e.flare.link,
           'Real: NASA logged ' + an(e.flare.cls) + e.flare.cls + ' flare that peaked on ' + whenText(e.flare.time) + '. The ' + pc + '% storm chance is a game number.') });
@@ -594,7 +597,7 @@ function createEngine(data) {
   function decisions(state) {
     var base = state, snaps = [], s, k, j, h, others, o, alt, c, out = [], mine;
     try {
-      s = newGame(base.seed, base.windowOpt ? { windowStart: base.windowOpt } : undefined);
+      s = newGame(base.seed, { windowStart: base.windowOpt || undefined, level: base.level });
       for (k = 0; k < base.history.length; k++) { snaps.push(s); s = runPlan(s, base.history[k].played, -1); if (!s) { return []; } }
       if (s.ls !== base.ls || s.power !== base.power || s.shield !== base.shield || s.stars !== base.stars || s.harvests !== base.harvests) { return []; }
       mine = outcomeOf(base);
@@ -656,7 +659,7 @@ function createEngine(data) {
 
     f = dec.filter(function (x) { return x.tone === 'try'; })[0];
     if (f) { tip = 'Next time, on sol ' + f.sol + ', try ' + f.otherName + ' instead of ' + f.name + '.'; }
-    else if (state.result.outcome === 'won') { tip = state.result.rating < 3 ? 'Next time, keep ' + T.goals.shieldFor3Stars + ' mSv of Shield for 3 stars.' : 'Try a new mission. Every game replays different NASA days.'; }
+    else if (state.result.outcome === 'won') { tip = state.result.rating < 3 ? 'Next time, keep ' + T.goals.shieldFor3Stars + ' mSv of Shield for 3 stars.' : state.level === 'cadet' ? 'Ready for more? Try Commander rank. Air runs out faster.' : 'Try a new mission. Every game replays different NASA days.'; }
     else { tip = { ls: 'Next time, make air early. Use Recycler overtime or MOXIE.', power: 'Next time, clean the panels and fix broken parts early.',
                    shield: 'Next time, build the dirt roof early.', goals: 'Next time, grow food and run experiments from the first sols.' }[state.result.reasons[0]] || 'Next time, check all three bars each sol.'; }
     return { headline: resultText(state), decisions: dec, real: real, fact: fact, tip: tip };
@@ -748,7 +751,13 @@ function createEngine(data) {
     var m = /[?&]seed=(\d+)/.exec(location.search);
     return m ? Number(m[1]) : Math.floor(Math.random() * 4294967296);
   }
-  function start() { markShown(); state = E.newGame(newSeed()); screen = 'game'; render(); window.scrollTo(0, 0); }
+  var rank = (/[?&]level=(cadet|commander)\b/.exec(location.search) || [])[1] || 'cadet';   // Cadet unless chosen
+  function start(level) { markShown(); if (typeof level === 'string') { rank = level; } state = E.newGame(newSeed(), { level: rank }); screen = 'game'; render(); window.scrollTo(0, 0); }
+  function rankBtn(level, title, sub) {
+    var wait = feed === 'checking';
+    return h('button', { class: 'big rank' + (level === 'cadet' ? '' : ' quiet'), disabled: wait, onclick: function () { start(level); } },
+      [h('b', { str: title }), h('span', { class: 'sub', str: wait ? 'Contacting NASA...' : sub })]);
+  }
   function act(fn) { markShown(); state = fn(state); if (state.phase === 'won' || state.phase === 'lost') { screen = 'end'; } render(); if (screen === 'end' || state.phase === 'morning') { window.scrollTo(0, 0); } }
 
   /* ---- where the space weather came from ---- */
@@ -761,10 +770,11 @@ function createEngine(data) {
     if (feed === 'checking') { return h('span', { class: 'badge', str: 'Checking NASA for live data...' }); }
     return h('span', { class: 'badge ' + (DATA.meta.mode === 'live' ? 'live' : 'archive'), str: runLabel() });
   }
-  function whence(s) {                   // the "Where does this come from?" button + its panel
+  function whence(s, extra) {            // the "Where does this come from?" button + its panel (extra = the event's replay note)
     if (!s) { return null; }
     var panel = h('div', { class: 'whence' }, [
       s.note ? h('p', { text: s.note }) : null,
+      extra ? h('p', { text: extra }) : null,
       h('p', { class: 'dim', str: 'Source: ' + s.name + '. ' + (s.live ? 'Fetched live from NASA on ' : 'Saved copy, retrieved ') + s.retrieved + '.' }),
       s.url ? h('p', {}, [link(s.url, 'Open the source page ↗')]) : h('p', { class: 'dim', str: 'This one has no web page.' })
     ]);
@@ -858,10 +868,10 @@ function createEngine(data) {
   /* ---- morning report ---- */
   function evItem(it, future) {
     var kids = [h('span', { class: 'ic', 'aria-hidden': 'true', str: it.icon }), h('div', {}, [
-      h('div', { class: 'ttl' }, [h('span', { text: it.title }), h('span', { class: 'pill ' + (it.real ? 'real' : 'game'), str: it.real ? 'Real NASA data' : 'Game event' })]),
+      h('div', { class: 'ttl' }, [h('span', { text: it.title }), h('span', { class: 'pill ' + (it.real ? 'real' : 'game'), str: !it.real ? 'Game event' : it.source && it.source.live ? 'Real NASA data · live' : 'Real NASA data · saved' })]),
       h('div', { text: it.text }),
       it.hit && !future ? h('div', { class: 'hit', str: 'Right now this storm would cost your Shield ' + E.projectedStormHit(state) + ' mSv.' }) : null,
-      h('div', { class: 'stamp', text: it.stamp }), whence(it.source)])];
+      whence(it.source, it.stamp)])];
     return h('div', { class: 'ev ' + it.kind }, kids);
   }
   function reportPanel() {
@@ -910,6 +920,42 @@ function createEngine(data) {
       h('p', {}, [h('button', { class: 'link', onclick: openSources, str: 'Data sources: every dataset and link' })])]);
   }
 
+  function jezeroLine() {                // real Perseverance MEDA temperatures (saved copy)
+    var j = D.mars.jezero.sol43to44;
+    return h('div', {}, [h('p', { str: 'Outside it is freezing. Perseverance measured ' + String(j.high.value).replace('-', '−') + ' °C by day and ' + String(j.low.value).replace('-', '−') + ' °C at night at Jezero.' }),
+      whence({ name: j.high.source, url: j.high.url, retrieved: j.high.retrieved, live: false, note: 'Real: NASA\'s first weather report from Jezero crater (Perseverance MEDA), sols 43 to 44, April 2021.' })]);
+  }
+
+  /* ---- debrief chart: the three bars, sol by sol (numbers only go into the svg) ---- */
+  var LINE = { ls: '#1d9bf0', power: '#b07800', shield: '#7447ff' };
+  function missionChart() {
+    var Hs = state.history, n = Hs.length, W = 1000, Ht = 380, L = 64, R = 190, Tp = 46, B = 46, pw = W - L - R, ph = Ht - Tp - B, out = '', keys = ['ls', 'power', 'shield'], ends = [], i, k, y;
+    function X(i) { return L + (n ? i / n : 0) * pw; }
+    function Y(p) { return Tp + (1 - p / 100) * ph; }
+    function pct(v, k) { return Math.max(0, Math.min(100, v / T.max[k] * 100)); }
+    out += '<rect x="' + L + '" y="' + Y(T.warn.danger * 100) + '" width="' + pw + '" height="' + (Y(0) - Y(T.warn.danger * 100)) + '" fill="#ffe0e1"/>';
+    for (i = 0; i < n; i++) { if (Hs[i].dust) { out += '<rect x="' + X(i) + '" y="' + Tp + '" width="' + (X(i + 1) - X(i)) + '" height="' + ph + '" fill="#eadcc8"/>'; } }
+    [0, 50, 100].forEach(function (g) { out += '<line x1="' + L + '" x2="' + (L + pw) + '" y1="' + Y(g) + '" y2="' + Y(g) + '" stroke="#c6d3ee" stroke-width="2"/><text x="' + (L - 10) + '" y="' + (Y(g) + 7) + '" text-anchor="end" font-size="20">' + g + '%</text>'; });
+    for (i = 0; i <= n; i += 5) { out += '<text x="' + X(i) + '" y="' + (Ht - 14) + '" text-anchor="middle" font-size="20">' + (i === 0 ? 'Start' : 'Sol ' + i) + '</text>'; }
+    for (i = 0; i < n; i++) { if (Hs[i].storm) { out += '<line x1="' + X(i + 1) + '" x2="' + X(i + 1) + '" y1="' + Tp + '" y2="' + (Tp + ph) + '" stroke="#e0262d" stroke-width="2" stroke-dasharray="6 6"/><text x="' + X(i + 1) + '" y="' + (Tp - 12) + '" text-anchor="middle" font-size="26">🌩️</text>'; } }
+    keys.forEach(function (k) {
+      var pts = [X(0) + ',' + Y(pct(T.start[k], k))];
+      for (i = 0; i < n; i++) { pts.push(X(i + 1) + ',' + Y(pct(Hs[i][k], k))); }
+      out += '<polyline points="' + pts.join(' ') + '" fill="none" stroke="' + LINE[k] + '" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/>';
+      ends.push({ k: k, y: Y(pct(state[k], k)) });
+    });
+    ends.sort(function (a, b) { return a.y - b.y; });
+    for (i = 1; i < ends.length; i++) { if (ends[i].y - ends[i - 1].y < 30) { ends[i].y = ends[i - 1].y + 30; } }
+    ends.forEach(function (e) {
+      var v = state[e.k], lab = e.k === 'ls' ? '💨 ' + Math.round(v) + '%' : e.k === 'power' ? '⚡ ' + Math.round(v) + ' kWh' : '🛡️ ' + (Math.round(v * 10) / 10) + ' mSv';
+      out += '<text x="' + (L + pw + 14) + '" y="' + (e.y + 8) + '" font-size="24" font-weight="800" fill="' + LINE[e.k] + '">' + lab + '</text>';
+    });
+    var box = h('div', { role: 'img', 'aria-label': 'Line chart of your three bars over ' + n + ' sols. At the end: Life Support ' + Math.round(state.ls) + '%, Power ' + Math.round(state.power) + ' kWh, Shield ' + (Math.round(state.shield * 10) / 10) + ' mSv. Particle storms: ' + state.stormsHit + '.' });
+    box.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + Ht + '" xmlns="http://www.w3.org/2000/svg" focusable="false" style="font-family:inherit" fill="#17224d">' + out + '</svg>';
+    return h('div', { class: 'panel chart' }, [h('h2', { str: 'Your mission, sol by sol' }), box,
+      h('p', { class: 'dim', str: 'Each line shows a bar as a share of full. 🌩️ = particle storm. Brown band = dust storm. Pink band = danger zone.' })]);
+  }
+
   /* ---- screens ---- */
   function startScreen() {
     return h('div', {}, [
@@ -918,6 +964,7 @@ function createEngine(data) {
       h('div', { class: 'panel' }, [
         h('h2', { str: 'Your mission' }),
         h('p', { text: 'You and a crewmate live at Jezero crater on Mars. Keep the base alive for 30 sols.' }),
+        jezeroLine(),
         h('ol', { class: 'steps' }, [h('li', { str: 'Read the morning report.' }), h('li', { str: 'Pick 2 of your 3 cards.' }), h('li', { str: 'Press sunset. The base uses air, power and Shield.' })]),
         h('p', { str: 'Every card costs something. There is no free safe choice!' })
       ]),
@@ -929,7 +976,9 @@ function createEngine(data) {
         h('p', { text: DATA.meta.mode === 'live' ? 'The space weather is real. This game replays the last 30 days of NASA data.' : 'The space weather is real. Every game replays 30 days of NASA data.' }),
         h('p', {}, [badge()])
       ]),
-      h('button', { class: 'big', disabled: feed === 'checking', onclick: start, str: feed === 'checking' ? 'Contacting NASA...' : 'Start mission' }),
+      h('div', { class: 'panel' }, [h('h2', { str: 'Pick your rank' }), h('div', { class: 'ranks' }, [
+        rankBtn('cadet', '🧑‍🚀 Cadet', 'Start here. Air lasts longer.'),
+        rankBtn('commander', '🚀 Commander', 'The full challenge. Air runs out faster.')])]),
       footer()
     ]);
   }
@@ -948,6 +997,7 @@ function createEngine(data) {
     return h('div', {}, [
       h('div', { class: 'top' }, [
         h('div', { class: 'sol', text: 'Sol ' + state.sol + ' of ' + T.sols }),
+        h('span', { class: 'rankchip', str: state.level === 'cadet' ? '🧑‍🚀 Cadet' : '🚀 Commander' }),
         h('div', { class: 'dim', str: 'Real NASA day ' + e.date + (DATA.meta.mode === 'live' ? ' (last 30 days)' : ' (archive, not live)') })
       ]),
       h('div', { class: 'solbar', 'aria-hidden': 'true' }, [h('i', { style: 'width:' + (state.sol - 1) / T.sols * 100 + '%' })]),
@@ -992,9 +1042,10 @@ function createEngine(data) {
         h('div', { class: 'stat' }, [h('b', { str: state.harvests + ' 🌱' }), h('span', { str: 'harvests' })]),
         h('div', { class: 'stat' }, [h('b', { str: state.totalDose + ' mSv' }), h('span', { text: 'radiation dose' })])
       ]),
-      hud(false),
+      missionChart(),
       h('div', { class: 'deb' }, [h('div', {}, left), h('div', {}, right)]),
-      h('button', { class: 'big', onclick: start, str: 'Play again' }),
+      h('button', { class: 'big', onclick: start, str: 'Play again as ' + (state.level === 'cadet' ? 'Cadet' : 'Commander') }),
+      h('button', { class: 'quiet', onclick: function () { markShown(); screen = 'start'; render(); window.scrollTo(0, 0); }, str: 'Change rank' }),
       footer()
     ]);
   }
