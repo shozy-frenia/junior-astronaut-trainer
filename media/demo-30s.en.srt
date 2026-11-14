@@ -1,0 +1,23 @@
+1
+00:00:00,000 --> 00:00:05,000
+Team Nabeghlavi presents Outpost 30 for the NASA Space Apps challenge “Build a Junior Astronaut Mission Trainer”.
+
+2
+00:00:05,000 --> 00:00:10,000
+Each sol replays a real NASA day. On 18 January 2026, NASA DONKI logged an X1.9 solar flare.
+
+3
+00:00:10,000 --> 00:00:15,000
+The same day, NASA’s SOHO observatory detected a particle storm near Earth. Storm shelter costs 8 kWh and a card tomorrow.
+
+4
+00:00:15,000 --> 00:00:20,000
+We pay it: the storm now takes 1.2 mSv of Shield instead of 4, and Power drops to 52. No choice is free.
+
+5
+00:00:20,000 --> 00:00:25,000
+13 NASA and CSA datasets, each with its source link. Space weather is live when online, and says so.
+
+6
+00:00:25,000 --> 00:00:30,000
+Play free in any browser, no account needed. Pick Cadet or Commander, then scan the code or open the link.
