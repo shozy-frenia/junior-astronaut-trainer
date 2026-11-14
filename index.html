@@ -1,0 +1,1050 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Outpost 30 - Junior Astronaut Mission Trainer</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app"></div>
+<div id="gloss" role="status"></div>
+
+<script src="data.js"></script>
+<script>
+/* =====================================================================
+   ENGINE: pure functions. State in -> new state out. No DOM, no globals.
+   [T] = tuned for game balance only. [R] = real, read from data.js.
+   ===================================================================== */
+/* ENGINE:START */
+function createEngine(data) {
+  'use strict';
+
+  /* ---------- tuning ---------- */
+  var TUNING = {
+    sols: 30, crew: 2, handSize: 3,                                   // [T]
+    start: { ls: 80, power: 60, shield: 20 },                         // [T] 30 sols x 0.67 = 20.1 mSv: without shielding the budget runs out
+    max:   { ls: 100, power: 100, shield: 20 },                       // [T]
+    lsPerSol: 5, solarPerSol: 30, baseUsePerSol: 20, cleanPanelBonus: 10, // [T]
+    dose: data.mars.radiation.surfaceGcrDose.value,                   // [R] 0.67 mSv/day, Curiosity RAD at Gale crater
+    doseWithRoof: 0.5,                                                // [T]
+    warn: { low: 0.35, danger: 0.2 },                                 // [T] bar turns amber under 35%, red under 20%
+    stormHit: 4, forbushFactor: 0.7, forbushSols: 2,                  // [T]
+    stormMult: { roof: 0.7, shelter: 0.3, wall: 0.2 },                // [T]
+    flareStormChance: { X: 0.5, M: 0.25, C: 0 },                      // [T]
+    cmeMinSpeed: 1000, glancingFactor: 0.5,                           // [T] only fast CMEs (1000 km/s+, same cut as data.js) that DONKI models as hitting Mars
+    stormCap: 3, stormGap: 3,                                         // [T] max storms per run, min sols between storms
+    dust: { earliest: 5, latest: 22, length: 3, solarFactor: 0.5 },   // [T]
+    failures: { min: 1, max: 2, earliest: 3, latest: 26, recyclerExtraLs: 5, panelPower: 10 }, // [T]
+    conjunctionSols: 4,                                               // [T] (real one lasted about 2.5 weeks)
+    goals: { stars: 3, harvests: 5, shieldFor3Stars: 4 }              // [T] was 5; with Shield 20 that was almost unreachable
+  };
+
+  /* ---------- small helpers ---------- */
+  function clone(o) { return JSON.parse(JSON.stringify(o)); }
+  function r2(x) { return Math.round(x * 100) / 100; }
+  function r1(x) { return Math.round(x * 10) / 10; }
+  function clamp(x, lo, hi) { return Math.max(lo, Math.min(hi, x)); }
+  function rnd(s) {                                  // mulberry32; mutates the working copy's s.rng
+    s.rng = (s.rng + 0x6D2B79F5) >>> 0;
+    var t = s.rng;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  }
+  function rint(s, lo, hi) { return lo + Math.floor(rnd(s) * (hi - lo + 1)); }
+  function shuffle(s, arr) {
+    var a = arr.slice(), i, j, t;
+    for (i = a.length - 1; i > 0; i--) { j = Math.floor(rnd(s) * (i + 1)); t = a[i]; a[i] = a[j]; a[j] = t; }
+    return a;
+  }
+  function dayMs(iso) { return Date.parse(iso + 'T00:00:00Z'); }
+  function addDays(iso, n) { return new Date(dayMs(iso) + n * 864e5).toISOString().slice(0, 10); }
+  function diffDays(a, b) { return Math.round((dayMs(b) - dayMs(a)) / 864e5); }
+  function dateOf(iso) { return String(iso).slice(0, 10); }
+
+  /* ---------- real data indexes (built once per engine) ---------- */
+  var CLASS_RANK = { C: 1, M: 2, X: 3 };
+  function flareRank(f) { return CLASS_RANK[f.letter] * 1000 + parseFloat(f.value.slice(1)); }
+
+  function isModel(sep) { return /^MODEL/.test(sep.value); }
+  function detectorWords(label) {                    // plain words for a DONKI detector name
+    if (/^GOES/.test(label)) { return { who: 'the GOES weather satellite', where: 'near Earth' }; }
+    if (/^SOHO/.test(label)) { return { who: 'the SOHO solar observatory', where: 'near Earth' }; }
+    if (/^STEREO/.test(label)) { return { who: 'the STEREO-A spacecraft', where: "in space near Earth's orbit" }; }
+    if (/ACE/.test(label)) { return { who: 'the ACE spacecraft', where: 'near Earth' }; }
+    return { who: label, where: 'near Earth' };
+  }
+
+  var idx = (function () {
+    var flares = {}, seps = {}, cmes = {};
+    data.donki.flares.forEach(function (f) {
+      var d = dateOf(f.date);
+      if (!flares[d] || flareRank(f) > flareRank(flares[d])) { flares[d] = f; }   // strongest flare of the day
+    });
+    data.donki.seps.forEach(function (e) {
+      var d = dateOf(e.date);
+      if (!seps[d] || (isModel(seps[d]) && !isModel(e))) { seps[d] = e; }          // prefer a real detector over a MODEL forecast
+    });
+    data.donki.cmes.forEach(function (c) {
+      if (!c.marsArrivalEstimate || c.value < TUNING.cmeMinSpeed) { return; }       // only CMEs DONKI models as reaching Mars
+      var d = dateOf(c.marsArrivalEstimate);
+      if (!cmes[d] || c.value > cmes[d].value) { cmes[d] = c; }
+    });
+    return { flares: flares, seps: seps, cmes: cmes };
+  })();
+
+  var conjRange = (function () {
+    var m = /(\d{4}-\d{2}-\d{2}) to (\d{4}-\d{2}-\d{2})/.exec(data.anchors.solarConjunction2026.nasaMaven.value);
+    return m ? { start: m[1], end: m[2] } : null;
+  })();
+
+  /* ---------- where each fact came from: live DONKI feed or a saved copy ---------- */
+  var LIVE = data.meta.mode === 'live';
+  function replayNote() { return LIVE ? 'Fetched live from NASA on ' + data.meta.fetched + ', replayed as a game day.' : 'Replayed, not live.'; }
+  function an(cls) { return /^[MX]/.test(cls) ? 'an ' : 'a '; }               // "an M3.5 flare", "a C2.0 flare"
+  function whenText(iso) { return String(iso).slice(0, 10) + ' ' + String(iso).slice(11, 16) + ' UTC'; }
+  function fromFeed(name, url, note) {               // a DONKI row: live if the live fetch worked, else the archive
+    return { name: name, url: url || '', note: note, live: LIVE, retrieved: LIVE ? data.meta.fetched : data.meta.retrieved };
+  }
+  function fromCopy(e, note) {                       // any other data.js entry: always a saved copy
+    return { name: e.source, url: e.url, note: note || '', live: false, retrieved: e.retrieved };
+  }
+  function fact(e, text, note) {                     // anchor shown on a card
+    return { text: text, url: e.url, source: fromCopy(e, note || 'The fact is real. The numbers on the card are game numbers.') };
+  }
+
+  function lightMin(date) {                          // [R] JPL Horizons, one-way minutes, linear between 10-day samples
+    var smp = data.earthMars.sampleEvery10Days, t = diffDays(smp[0].date, date) / 10;
+    if (t <= 0) { return smp[0].value; }
+    var i = Math.floor(t);
+    if (i >= smp.length - 1) { return smp[smp.length - 1].value; }
+    return r1(smp[i].value + (smp[i + 1].value - smp[i].value) * (t - i));
+  }
+
+  /* ---------- cards ([T] amounts; anchors are real, from data.js) ---------- */
+  function ev(s) { return s.schedule[s.sol - 1]; }
+  var CARDS = [
+    { id: 'recycler', icon: '♻️', name: 'Recycler overtime', text: 'Run the air and water cleaner extra hard.',
+      cost: { power: 10 }, gain: { ls: 10 },
+      anchor: function () { var a = data.anchors.issWater.recovery; return fact(a, a.kid); } },
+    { id: 'moxie', icon: '🫁', name: 'MOXIE oxygen maker', text: 'Make oxygen out of Mars air.',
+      cost: { power: 15 }, gain: { ls: 12 },
+      anchor: function () { var a = data.anchors.moxie.oxygenTotal; return fact(a, a.kid); } },
+    { id: 'grow', icon: '🌱', name: 'Grow food', text: 'Tend the greenhouse and pick a harvest.',
+      cost: { power: 10, ls: 5 }, gain: {}, extraGain: '+1 harvest, and +3% Life Support next sol',
+      fx: function (s) { s.harvests += 1; s.bonusNext += 3; return 'Harvest picked! The plants will make a little extra air next sol.'; },
+      anchor: function () { var a = data.csaFood[3]; return fact(a.fact, a.kid); } },
+    { id: 'wall', icon: '💧', name: 'Water wall', text: 'Stack water tanks around the sleeping area. Water blocks space rays.',
+      cost: { ls: 15 }, gain: {}, extraGain: 'next particle storm hurts 80% less',
+      ok: function (s) { return !s.wallArmed; },
+      fx: function (s) { s.wallArmed = true; return 'Water wall is ready for the next particle storm.'; },
+      anchor: function () { var a = data.anchors.shieldWater; return fact(a, a.kid); } },
+    { id: 'roof', icon: '🧱', name: 'Dirt roof', text: 'Pile Mars soil on the roof as a radiation shield.',
+      cost: { power: 20 }, gain: {}, extraGain: 'daily dose drops to 0.50 mSv. Storms hurt 30% less. Lasts all mission.',
+      ok: function (s) { return !s.roofBuilt; },
+      fx: function (s) { s.roofBuilt = true; return 'Soil roof built. Every day from now on takes in less radiation.'; },
+      anchor: function () { var a = data.anchors.shieldSoil; return fact(a, a.kid); } },
+    { id: 'shelter', icon: '🛖', name: 'Storm shelter', text: 'Hide in the safest room until the storm passes.',
+      cost: { power: 8 }, extraCost: 'next sol you play only 1 card', gain: {}, extraGain: "today's storm hurts 70% less",
+      ok: function (s) { return !!ev(s).storm && !s.shelterToday; },
+      fx: function (s) { s.shelterToday = true; s.lostActionNext = 1; return 'The crew is in the shelter. Tomorrow you only get to play 1 card.'; },
+      anchor: function () { var a = data.anchors.stormShelter; return fact(a, a.kid); } },
+    { id: 'rock', icon: '🪨', name: 'Rock-sample walk', text: 'Walk out and collect a rock sample.',
+      cost: { ls: 5, power: 5 }, gain: {}, extraGain: '+1 science star',
+      fx: function (s) { s.stars += 1; return 'Rock sample collected: +1 science star.'; },
+      anchor: function () { var a = data.anchors.sampleTubes; return fact(a, a.kid); } },
+    { id: 'clean', icon: '🧹', name: 'Clean solar panels', text: 'Brush the dust off the solar panels.',
+      cost: { ls: 5 }, gain: {}, extraGain: '+10 kWh every sol until the next dust storm',
+      ok: function (s) { return !s.panelsClean; },
+      fx: function (s) { s.panelsClean = true; return 'Panels are shiny. More power every sol (until dust comes back).'; },
+      anchor: function () { var a = data.anchors.opportunity.dustTau; return fact(a, a.kid); } },
+    { id: 'call', icon: '📡', name: 'Call Earth', text: 'Ask Mission Control what is coming. Radio messages need time to travel.',
+      cost: { power: 5 }, extraCost: 'you wait for the reply', gain: {}, extraGain: "see the next 2 sols' events",   // [T] the radio uses power
+      ok: function (s) { return s.sol < TUNING.sols; },                                                                          // never dealt on the last sol
+      fx: function (s) {
+        var d = ev(s).light, sols = [];
+        if (s.sol + 1 <= TUNING.sols) { sols.push(s.sol + 1); }
+        if (s.sol + 2 <= TUNING.sols) { sols.push(s.sol + 2); }
+        s.forecast = { made: s.sol, sols: sols };
+        return 'Radio delay today: ' + d + ' minutes one way. The answer took about ' + r1(d * 2) + ' minutes. Earth sent a forecast.';
+      },
+      anchor: function () {
+        var a = data.earthMars.lightMinutes.min;
+        return fact(a, data.glossary.lightMinutes, 'Real: NASA JPL Horizons gives the Earth-Mars distance for every day. The delay on the card comes from it.');
+      } },
+    { id: 'fixit', icon: '🔧', name: 'Fix-it (3D-print a part)', text: 'Print a new part and repair something broken.',
+      cost: { power: 10 }, gain: {}, extraGain: 'fixes 1 broken machine',
+      ok: function (s) { return s.failures.length > 0; },
+      fx: function (s) { var f = s.failures.shift(); return f === 'recycler' ? 'The recycler works again.' : 'The solar panel string works again.'; },
+      anchor: function () { var a = data.anchors.printedPart; return fact(a, a.kid); } },
+    { id: 'lab', icon: '🔬', name: 'Lab experiment', text: 'Run a science experiment and learn a real space fact.',
+      cost: { power: 10 }, gain: {}, extraGain: '+1 science star and 1 real fact',
+      fx: function (s) {
+        var f = data.osdr[s.labCount % data.osdr.length];
+        s.labCount += 1; s.stars += 1;
+        return { text: 'Science star! ' + f.kid, url: f.evidence.url, tip: f.studyId + '; ' + f.subject,
+                 name: f.evidence.source, retrieved: f.evidence.retrieved, note: f.studyId + '. Subject: ' + f.subject + '.' };
+      } },
+    { id: 'psave', icon: '🌙', name: 'Power-save night', text: 'Slow the machines down overnight.',
+      cost: { ls: 5 }, gain: { power: 10 }, extraCost: 'the recycler runs slowly' }
+  ];
+  var byId = {};
+  CARDS.forEach(function (c) { byId[c.id] = c; });
+
+  function costText(c) {
+    var p = [];
+    if (c.cost.power) { p.push('−' + c.cost.power + ' kWh'); }
+    if (c.cost.ls) { p.push('−' + c.cost.ls + '% Life Support'); }
+    if (c.extraCost) { p.push(c.extraCost); }
+    return p.length ? p.join(', ') : 'nothing';
+  }
+  function gainText(c) {
+    var p = [];
+    if (c.gain.power) { p.push('+' + c.gain.power + ' kWh'); }
+    if (c.gain.ls) { p.push('+' + c.gain.ls + '% Life Support'); }
+    if (c.extraGain) { p.push(c.extraGain); }
+    return p.join(', ');
+  }
+
+  /* ---------- schedule: everything random is rolled once at newGame, so forecasts are true ---------- */
+  function briefFlare(f) { return { cls: f.value, letter: f.letter, id: f.id, link: f.url, time: f.date }; }
+
+  function buildSchedule(s, windowStart) {
+    var T = TUNING, sch = [], sol, date, e, cand, flare, sep, cme, roll, p, i;
+    var dustSol = rint(s, T.dust.earliest, T.dust.latest);
+    var nFail = rint(s, T.failures.min, T.failures.max), failSols = [], failTypes = shuffle(s, ['recycler', 'panel']);
+    while (failSols.length < nFail) { var x = rint(s, T.failures.earliest, T.failures.latest); if (failSols.indexOf(x) < 0) { failSols.push(x); } }
+    var lastStorm = -99, stormCount = 0, pending = null, conjCount = 0;
+
+    for (sol = 1; sol <= T.sols; sol++) {
+      date = addDays(windowStart, sol - 1);
+      flare = idx.flares[date] || null;
+      e = { sol: sol, date: date, flare: flare ? briefFlare(flare) : null, storm: null, dust: 0, failure: null, conjunction: 0, light: lightMin(date) };
+
+      cand = null; sep = idx.seps[date]; cme = idx.cmes[date];
+      if (sep) {
+        cand = { cause: 'sep', real: true, factor: 1, label: sep.value, model: isModel(sep), detector: detectorWords(sep.value), id: sep.id, link: sep.url, time: sep.date };
+      } else if (cme) {
+        cand = { cause: 'cme', real: true, factor: cme.glancingBlow ? T.glancingFactor : 1, glancing: cme.glancingBlow, speed: cme.value, id: cme.id, link: cme.url, time: cme.marsArrivalEstimate, launched: cme.date };
+      } else if (pending) {
+        cand = { cause: 'flare', real: false, factor: 1, flare: pending };
+      }
+      pending = null;
+      if (cand && stormCount < T.stormCap && sol - lastStorm >= T.stormGap) { e.storm = cand; lastStorm = sol; stormCount++; }
+
+      if (flare) {                                   // roll for a storm next sol (always draws, so the run stays deterministic)
+        p = T.flareStormChance[flare.letter] || 0;
+        roll = rnd(s);
+        if (roll < p) { pending = e.flare; }
+      }
+      if (sol >= dustSol && sol < dustSol + T.dust.length) { e.dust = sol - dustSol + 1; }
+      i = failSols.indexOf(sol);
+      if (i >= 0) { e.failure = failTypes[i]; }
+      if (conjRange && date >= conjRange.start && date <= conjRange.end && conjCount < T.conjunctionSols) { e.conjunction = ++conjCount; }
+      sch.push(e);
+    }
+    return sch;
+  }
+
+  /* ---------- sol lifecycle ---------- */
+  function enterSol(s, n) {
+    var e;
+    s.sol = n; s.phase = 'morning'; s.hand = []; s.picks = [];
+    s.required = Math.max(1, TUNING.crew - s.lostActionNext);
+    s.lostActionNext = 0; s.shelterToday = false;
+    e = ev(s);
+    if (e.dust === 1) { s.panelsClean = false; }
+    if (e.failure && s.failures.indexOf(e.failure) < 0) { s.failures.push(e.failure); }
+    if (s.forecast && s.forecast.sols.length && n > s.forecast.sols[s.forecast.sols.length - 1]) { s.forecast = null; }
+  }
+
+  function newGame(seed, opts) {
+    opts = opts || {};
+    var T = TUNING, first = data.meta.window.start, last = data.meta.window.end;
+    var span = diffDays(first, last) + 1;
+    var s = { v: 1, seed: seed >>> 0, rng: seed >>> 0 };
+    var startOffset = opts.windowStart ? diffDays(first, opts.windowStart) : rint(s, 0, span - T.sols);
+    if (startOffset < 0 || startOffset > span - T.sols) { throw new Error('windowStart outside the archive'); }
+    s.windowStart = addDays(first, startOffset); s.windowOpt = opts.windowStart || null;
+    s.schedule = buildSchedule(s, s.windowStart);
+    s.ls = T.start.ls; s.power = T.start.power; s.shield = T.start.shield;
+    s.stars = 0; s.harvests = 0;
+    s.roofBuilt = false; s.wallArmed = false; s.panelsClean = false; s.shelterToday = false;
+    s.lostActionNext = 0; s.failures = []; s.forbushLeft = 0; s.bonusDue = 0; s.bonusNext = 0;
+    s.labCount = 0; s.stormsHit = 0; s.totalDose = 0;
+    s.forecast = null; s.log = []; s.history = []; s.lastSunset = null; s.result = null;
+    enterSol(s, 1);
+    return s;
+  }
+
+  function eligible(s, c) { return c.ok ? c.ok(s) : true; }
+
+  function startPlan(state) {
+    if (state.phase !== 'morning') { throw new Error('startPlan: phase is ' + state.phase); }
+    // each sol deals from its own shuffle of the whole deck, so a swapped choice in the debrief replay cannot change later luck
+    var s = clone(state), deal = { rng: ((s.seed ^ Math.imul(s.sol, 0x9E3779B1)) + 0x7F4A7C15) >>> 0 };
+    var order = shuffle(deal, CARDS.filter(function (c) { return c.id !== 'shelter'; })).filter(function (c) { return eligible(s, c); });
+    var must = eligible(s, byId.shelter) ? [byId.shelter] : [];                     // [T] Storm shelter is always dealt on storm days
+    s.hand = shuffle(deal, must.concat(order).slice(0, TUNING.handSize)).map(function (c) { return c.id; });
+    s.phase = 'plan';
+    return s;
+  }
+
+  function blockReason(s, c) {
+    if (c.id === 'call' && ev(s).conjunction) { return 'Mars is behind the Sun, so no signal gets through'; }
+    return null;
+  }
+  function afterCard(s, c) {
+    return {
+      ls: Math.min(TUNING.max.ls, s.ls - (c.cost.ls || 0) + (c.gain.ls || 0)),
+      power: Math.min(TUNING.max.power, s.power - (c.cost.power || 0) + (c.gain.power || 0))
+    };
+  }
+  function affordReason(s, c) {
+    var a = afterCard(s, c);
+    if (a.power <= 0) { return 'Not enough power'; }
+    if (a.ls <= 0) { return 'Not enough Life Support'; }
+    return null;
+  }
+
+  function canPlay(state, id) {
+    var c = byId[id];
+    if (!c) { return { ok: false, reason: 'Unknown card' }; }
+    if (state.phase !== 'plan') { return { ok: false, reason: 'Not planning right now' }; }
+    if (state.hand.indexOf(id) < 0) { return { ok: false, reason: 'Not in your hand' }; }
+    if (state.picks.indexOf(id) >= 0) { return { ok: false, reason: 'Already played' }; }
+    var b = blockReason(state, c);
+    if (b) { return { ok: false, reason: b }; }
+    var a = affordReason(state, c);
+    if (!a) { return { ok: true }; }
+    var alt = state.hand.some(function (h) {
+      return h !== id && state.picks.indexOf(h) < 0 && !blockReason(state, byId[h]) && !affordReason(state, byId[h]);
+    });
+    return alt ? { ok: false, reason: a } : { ok: true, forced: true };   // no safe choice left: allowed, the mission may end
+  }
+
+  function playCard(state, id) {
+    var chk = canPlay(state, id);
+    if (!chk.ok) { throw new Error('playCard(' + id + '): ' + chk.reason); }
+    var s = clone(state), c = byId[id], a = afterCard(s, c), out;
+    s.ls = Math.max(0, a.ls); s.power = Math.max(0, a.power);   // a forced play can empty a bar, never go below 0
+    out = c.fx ? c.fx(s) : null;
+    if (typeof out === 'string') { out = { text: out }; }
+    s.picks.push(id);
+    s.log.push({ sol: s.sol, text: c.name + ': ' + (out ? out.text : 'done.'), url: out && out.url ? out.url : '', tip: out && out.tip ? out.tip : '',
+                 source: out && out.url ? { name: out.name || '', url: out.url, retrieved: out.retrieved || '', live: false, note: out.note || '' } : null });
+    var left = s.hand.filter(function (h) { return s.picks.indexOf(h) < 0 && !blockReason(s, byId[h]); });
+    if (s.picks.length >= s.required || left.length === 0) { s.phase = 'sunsetReady'; }
+    return s;
+  }
+
+  function projectedStormHit(state) {
+    var e = ev(state);
+    if (!e.storm) { return 0; }
+    var m = TUNING.stormMult;
+    return r2(TUNING.stormHit * e.storm.factor * (state.roofBuilt ? m.roof : 1) * (state.shelterToday ? m.shelter : 1) * (state.wallArmed ? m.wall : 1));
+  }
+
+  function endSol(state) {
+    if (state.phase !== 'sunsetReady') { throw new Error('endSol: phase is ' + state.phase); }
+    var T = TUNING, s = clone(state), e = ev(s), notes = [], before = { ls: s.ls, power: s.power, shield: s.shield };
+
+    /* life support */
+    var dLs = -T.lsPerSol;
+    if (s.failures.indexOf('recycler') >= 0) { dLs -= T.failures.recyclerExtraLs; notes.push('Broken recycler: −' + T.failures.recyclerExtraLs + '% extra'); }
+    if (s.bonusDue) { dLs += s.bonusDue; notes.push('Plants made +' + s.bonusDue + '% air'); }
+    s.bonusDue = s.bonusNext; s.bonusNext = 0;
+
+    /* power */
+    var dust = e.dust > 0, dPow = T.solarPerSol * (dust ? T.dust.solarFactor : 1) - T.baseUsePerSol;
+    if (dust) { notes.push('Dust storm: solar power cut in half'); }
+    if (s.panelsClean && !dust) { dPow += T.cleanPanelBonus; }
+    if (s.failures.indexOf('panel') >= 0) { dPow -= T.failures.panelPower; notes.push('Broken solar string: −' + T.failures.panelPower + ' kWh'); }
+
+    /* shield */
+    var dose = (s.roofBuilt ? T.doseWithRoof : T.dose) * (s.forbushLeft > 0 ? T.forbushFactor : 1);
+    if (s.forbushLeft > 0) { s.forbushLeft -= 1; notes.push('After the storm, fewer space rays (Forbush dip)'); }
+    var hit = 0;
+    if (e.storm) {
+      hit = projectedStormHit(s);
+      s.wallArmed = false; s.forbushLeft = T.forbushSols; s.stormsHit += 1;
+      notes.push('Particle storm: Shield −' + hit + ' mSv');
+    }
+    dose = r2(dose);
+
+    s.ls = clamp(r2(s.ls + dLs), 0, T.max.ls);
+    s.power = clamp(r2(s.power + dPow), 0, T.max.power);
+    s.shield = clamp(r2(s.shield - dose - hit), 0, T.max.shield);
+    s.totalDose = r2(s.totalDose + dose + hit);
+    s.shelterToday = false;
+
+    s.lastSunset = { sol: s.sol, dLs: r2(s.ls - before.ls), dPower: r2(s.power - before.power), dShield: r2(s.shield - before.shield), notes: notes };
+    s.history.push({ sol: s.sol, date: e.date, ls: s.ls, power: s.power, shield: s.shield, played: s.picks.slice(), hand: s.hand.slice(),
+                     flare: e.flare ? e.flare.cls : null, storm: !!e.storm, dust: dust });
+
+    var dead = [];
+    if (s.ls <= 0) { dead.push('ls'); }
+    if (s.power <= 0) { dead.push('power'); }
+    if (s.shield <= 0) { dead.push('shield'); }
+    var G = T.goals;
+    if (dead.length) {
+      s.phase = 'lost';
+      s.result = { outcome: 'lost', reasons: dead, rating: 0 };
+    } else if (s.sol >= T.sols) {
+      if (s.stars >= G.stars && s.harvests >= G.harvests) {
+        s.phase = 'won';
+        s.result = { outcome: 'won', reasons: [], rating: s.shield >= G.shieldFor3Stars ? 3 : 2 };
+      } else {
+        s.phase = 'lost';
+        s.result = { outcome: 'lost', reasons: ['goals'], rating: 0 };
+      }
+    } else {
+      enterSol(s, s.sol + 1);
+    }
+    return s;
+  }
+
+  /* ---------- read-only views (also pure) ---------- */
+  var LOSS_TEXT = {
+    ls: 'Life Support hit 0: the tanks ran out of air and water.',
+    power: 'Power hit 0: the machines stopped.',
+    shield: 'Shield hit 0: the safe radiation dose is used up.'
+  };
+  function resultText(state) {
+    var r = state.result;
+    if (!r) { return ''; }
+    if (r.outcome === 'won') { return 'You reached sol ' + TUNING.sols + ' with every bar above 0 and all mission goals done!'; }
+    if (r.reasons[0] === 'goals') {
+      return 'You reached sol ' + TUNING.sols + ', but missed a goal. You got ' + state.stars + '/' + TUNING.goals.stars +
+             ' science stars and ' + state.harvests + '/' + TUNING.goals.harvests + ' harvests. The crew flies home safely.';
+    }
+    return r.reasons.map(function (k) { return LOSS_TEXT[k]; }).join(' ') + ' The mission ends early and the crew flies home safely.';
+  }
+
+  function reportFor(state, sol) {
+    var e = state.schedule[sol - 1], out = [], T = TUNING, c, text, stamp, src;
+    if (e.conjunction) {
+      var cj = data.anchors.solarConjunction2026.nasaMaven;
+      out.push({ kind: 'conj', icon: '📡', title: 'Mars is behind the Sun', real: true, link: cj.url,
+        text: 'This is called solar conjunction. The Sun blocks our radio for about two weeks in real life; in this game Call Earth is blocked for ' + T.conjunctionSols + ' sols (day ' + e.conjunction + ').',
+        stamp: 'Really happened ' + cj.value + ' (NASA). Replayed, not live.',
+        source: fromCopy(cj, 'Real: NASA says no mission could reach Mars on these dates. The game blocks Call Earth for ' + T.conjunctionSols + ' sols.') });
+    }
+    if (e.flare) {
+      var pc = Math.round((T.flareStormChance[e.flare.letter] || 0) * 100);
+      out.push({ kind: 'flare', icon: '☀️', title: 'Solar flare ' + e.flare.cls, real: true, link: e.flare.link,
+        text: 'The Sun flashed. The flash itself cannot get through Mars air, so it is only a warning. Chance of a particle storm on the next sol: ' + pc + '%.',
+        stamp: 'Really happened on ' + dateOf(e.flare.time) + '. ' + replayNote() + ' The ' + pc + '% chance is a game number.',
+        source: fromFeed('NASA DONKI: solar flare ' + e.flare.cls, e.flare.link,
+          'Real: NASA logged ' + an(e.flare.cls) + e.flare.cls + ' flare that peaked on ' + whenText(e.flare.time) + '. The ' + pc + '% storm chance is a game number.') });
+    }
+    if (e.storm) {
+      c = e.storm;
+      if (c.cause === 'sep') {
+        if (c.model) {
+          text = "NASA's computer model forecast fast particles near Earth on " + dateOf(c.time) + ' (a forecast, not a detection). In this game we imagine them reaching Mars too.';
+          stamp = 'NASA forecast. ' + replayNote();
+          src = fromFeed('NASA DONKI: particle event forecast', c.link, 'Real NASA forecast (not a detection) for ' + whenText(c.time) + ': ' + c.label + '.');
+        } else {
+          text = 'Detected ' + c.detector.where + ' on ' + dateOf(c.time) + ' by ' + c.detector.who + '. In this game we imagine it reaching Mars too.';
+          stamp = 'Real detection. ' + replayNote();
+          src = fromFeed('NASA DONKI: solar energetic particle event', c.link, 'Real: ' + c.label + ' saw fast particles on ' + whenText(c.time) + '. In the game we imagine them reaching Mars too.');
+        }
+      } else if (c.cause === 'cme') {
+        text = 'A CME left the Sun on ' + dateOf(c.launched) + ', moving ' + c.speed + ' km/s. NASA\'s model says it reaches Mars today.' + (c.glancing ? ' It only clips us, so it is weaker.' : '');
+        stamp = 'NASA computer model, arrival ' + dateOf(c.time) + '. ' + replayNote();
+        src = fromFeed('NASA DONKI: coronal mass ejection (CME)', c.link, 'Real: NASA recorded this CME leaving the Sun on ' + whenText(c.launched) + '. NASA\'s computer model says it reaches Mars on ' + whenText(c.time) + '.');
+      } else {
+        text = "Yesterday's " + c.flare.cls + ' flare sent particles our way.';
+        stamp = 'The flare was real (' + dateOf(c.flare.time) + '). ' + replayNote() + ' The storm is a game roll.';
+        src = fromFeed('NASA DONKI: solar flare ' + c.flare.cls, c.flare.link, 'Real: the ' + c.flare.cls + ' flare, peak ' + whenText(c.flare.time) + '. The storm after it is a game roll.');
+      }
+      out.push({ kind: 'storm', icon: '🌩️', title: 'Particle storm!', real: c.real, link: c.link || (c.flare && c.flare.link) || '', hit: true,
+        text: text + ' Your Shield will take a hit today.', stamp: stamp, source: src });
+    }
+    if (e.dust) {
+      var tau = data.anchors.opportunity.dustTau;
+      out.push({ kind: 'dust', icon: '🟤', title: 'Dust storm (day ' + e.dust + ' of ' + T.dust.length + ')', real: false, link: tau.url,
+        text: 'Dust hides the Sun, so solar power is cut in half.' + (e.dust === 1 ? ' Dust also covers the panels, so clean-panel bonuses are lost.' : ''),
+        stamp: 'Game event. Real dust storms ended the rovers Opportunity and InSight. ' + tau.kid,
+        source: fromCopy(tau, 'Game event. Real dust storms ended the Opportunity and InSight missions.') });
+    }
+    if (e.failure) {
+      var rec = e.failure === 'recycler', fa = rec ? data.anchors.issWater.recovery : data.anchors.insight.powerMay2022;
+      out.push({ kind: 'failure', icon: '🔧', title: rec ? 'The recycler broke' : 'A solar panel string broke', real: false, link: fa.url,
+        text: rec ? 'Life Support will drain 5% faster every sol until you use Fix-it.' : 'You lose 10 kWh every sol until you use Fix-it.',
+        stamp: 'Game event. Real crews repair their space station machines.',
+        source: fromCopy(fa, rec ? 'Game event. The recycler is based on the real water recycler on the space station.'
+                                 : 'Game event. Real example: dust cut InSight\'s power from 5,000 to 500 watt-hours per sol.') });
+    }
+    return out;
+  }
+  function report(state) { return reportFor(state, state.sol); }
+
+  function forecast(state) {
+    if (!state.forecast) { return []; }
+    return state.forecast.sols.filter(function (n) { return n > state.sol; }).map(function (n) {
+      return { sol: n, date: state.schedule[n - 1].date, items: reportFor(state, n) };
+    });
+  }
+
+  function cardViews(state) {
+    return state.hand.map(function (id) {
+      var c = byId[id], chk = canPlay(state, id), an = c.anchor ? c.anchor() : null;
+      var text = c.text;
+      if (id === 'call') { text += ' Delay today: ' + ev(state).light + ' min one way.'; }
+      var played = state.picks.indexOf(id) >= 0, showWhy = state.phase === 'plan' && !played;
+      return { id: id, icon: c.icon, name: c.name, text: text, costText: costText(c), gainText: gainText(c), anchor: an,
+               played: played, canPlay: chk.ok, reason: showWhy ? (chk.ok ? (chk.forced ? 'No safe choice left!' : '') : chk.reason) : '' };
+    });
+  }
+
+  /* ---------- bar levels and the guide's one-line hints ---------- */
+  var BAR_NAMES = { ls: 'Life Support', power: 'Power', shield: 'Shield' };
+  var BAR_UNITS = { ls: '%', power: ' kWh', shield: ' mSv' };
+  function level(state, k) {                         // 'ok' | 'low' | 'danger', one rule for the bars and the guide
+    var p = state[k] / TUNING.max[k];
+    return p < TUNING.warn.danger ? 'danger' : p < TUNING.warn.low ? 'low' : 'ok';
+  }
+  function levels(state) { return { ls: level(state, 'ls'), power: level(state, 'power'), shield: level(state, 'shield') }; }
+
+  var TIPS = ['Every card costs something. Pick what you need most.', 'Check all three bars before you choose.',
+              'Harvests count as a goal and make a little air.', 'Science stars come from rocks and lab work.',
+              'Call Earth shows what is coming next.', 'Save a card for the bar that is lowest.'];
+  function hint(state) {                             // -> { mood: 'calm' | 'worried' | 'alert' | 'happy', text }
+    var T = TUNING, s = state, lv = levels(s), e = ev(s), left = T.sols - s.sol + 1, worst = null, w = 1, k, p, ns, nh, bits = [];
+    function has(id) { return s.hand.indexOf(id) >= 0 && s.picks.indexOf(id) < 0; }
+    if (s.phase === 'won') { return { mood: 'happy', text: s.result.rating === 3 ? 'Perfect mission! You are a star astronaut.' : 'Mission complete! Great teamwork, astronaut.' }; }
+    if (s.phase === 'lost') { return { mood: 'calm', text: 'Good try! See what happened, then fly again.' }; }
+    ['ls', 'power', 'shield'].forEach(function (b) { p = s[b] / T.max[b]; if (lv[b] !== 'ok' && p < w) { w = p; worst = b; } });
+    if (worst && lv[worst] === 'danger') {
+      if (worst === 'ls') { return { mood: 'worried', text: 'Life Support is almost empty! Pick a card that makes air.' }; }
+      if (worst === 'power') { return { mood: 'worried', text: 'Power is almost gone! Clean panels or save energy.' }; }
+      return { mood: 'worried', text: s.roofBuilt ? 'Shield is very low! Dodge storms with a shelter or wall.' : 'Shield is very low! A dirt roof cuts radiation daily.' };
+    }
+    if (e.storm) {
+      if (s.shelterToday) { return { mood: 'happy', text: 'The crew is safe in the shelter. Good thinking!' }; }
+      if (s.wallArmed) { return { mood: 'alert', text: 'Your water wall will soften this storm.' }; }
+      return { mood: 'alert', text: has('shelter') ? 'A particle storm hits today! Play Storm shelter.' : 'A particle storm hits today! Shielding helps.' };
+    }
+    if (s.failures.length) { return { mood: 'alert', text: 'Something is broken. ' + (has('fixit') ? 'Play Fix-it to repair it.' : 'Fix-it can repair it.') }; }
+    if (e.conjunction) { return { mood: 'calm', text: 'Mars is behind the Sun. Call Earth is blocked today.' }; }
+    if (e.dust) { return { mood: 'alert', text: 'Dust hides the Sun. Solar power is cut in half.' }; }
+    if (e.flare) { return { mood: 'alert', text: e.flare.letter === 'C' ? 'A small flare. No storm is expected tomorrow.' : 'A big flare! A particle storm may come tomorrow.' }; }
+    if (worst) { return { mood: 'worried', text: BAR_NAMES[worst] + ' is getting low. Plan ahead.' }; }
+    ns = Math.max(0, T.goals.stars - s.stars); nh = Math.max(0, T.goals.harvests - s.harvests);
+    if (left <= 9 && (ns || nh)) {
+      if (ns) { bits.push(ns + (ns > 1 ? ' stars' : ' star')); }
+      if (nh) { bits.push(nh + (nh > 1 ? ' harvests' : ' harvest')); }
+      return { mood: 'alert', text: 'Only ' + left + ' sols left! You still need ' + bits.join(' and ') + '.' };
+    }
+    if (s.sol <= 4 && !s.roofBuilt) { return { mood: 'calm', text: 'Tip: a dirt roof cuts radiation every sol.' }; }
+    if (s.phase === 'sunsetReady') { return { mood: 'happy', text: 'Good picks! Press sunset when you are ready.' }; }
+    return { mood: 'calm', text: TIPS[s.sol % TIPS.length] };
+  }
+
+  /* ---------- debrief: replay the mission with one choice swapped ---------- */
+  function firstLegal(s) { return s.hand.filter(function (id) { return canPlay(s, id).ok; })[0]; }
+  function runPlan(s, want, swapJ, swapId) {         // one sol; null if the swapped card was not legal
+    var j, id;
+    s = startPlan(s);
+    for (j = 0; j < want.length && s.phase === 'plan'; j++) {
+      id = j === swapJ ? swapId : want[j];
+      if (!canPlay(s, id).ok) { if (j === swapJ) { return null; } id = firstLegal(s); }   // hands can shift after a swap
+      s = playCard(s, id);
+    }
+    while (s.phase === 'plan') { s = playCard(s, firstLegal(s)); }
+    return endSol(s);
+  }
+  function runFrom(base, k0, s, swapJ, swapId) {
+    for (var k = k0; k < base.history.length && s.phase !== 'won' && s.phase !== 'lost'; k++) {
+      s = runPlan(s, base.history[k].played, k === k0 ? swapJ : -1, swapId);
+      if (!s) { return null; }
+    }
+    return s;
+  }
+  function outcomeOf(s) {
+    var G = TUNING.goals, M = TUNING.max, h = s.history, low = 100, mins = { ls: M.ls, power: M.power, shield: M.shield }, i, p, goals, alive = s.phase !== 'lost';
+    for (i = 0; i < h.length; i++) {
+      mins.ls = Math.min(mins.ls, h[i].ls); mins.power = Math.min(mins.power, h[i].power); mins.shield = Math.min(mins.shield, h[i].shield);
+      p = Math.min(h[i].ls / M.ls, h[i].power / M.power, h[i].shield / M.shield) * 100; if (p < low) { low = p; }
+    }
+    goals = Math.min(s.stars, G.stars) + Math.min(s.harvests, G.harvests);
+    return { sols: h.length, alive: alive, won: s.phase === 'won', goals: goals, stars: Math.min(s.stars, G.stars), harv: Math.min(s.harvests, G.harvests),
+             mins: mins, reason: s.result ? s.result.reasons[0] : null,
+             score: h.length * 100 + (alive ? 200 : 0) + (s.phase === 'won' ? 400 : 0) + goals * 30 + low };
+  }
+  function compare(b, a, altName) {                  // b = your mission, a = the swapped one -> { d, tone, text }
+    var d = r2(b.score - a.score), good = d > 0, k, best = null, bd = 0, diff, x;
+    if (b.alive !== a.alive || b.won !== a.won || b.sols !== a.sols) {
+      if (good) { return { d: d, tone: 'good', text: a.reason === 'goals' ? 'Without it, you would have missed a mission goal.' : BAR_NAMES[a.reason] ? 'Without it, ' + BAR_NAMES[a.reason] + ' would have hit 0 on sol ' + a.sols + '.' : 'Without it, the mission would have ended sooner.' }; }
+      return { d: d, tone: 'try', text: a.won ? 'Playing ' + altName + ' instead would have won the mission.' : 'Playing ' + altName + ' instead would have kept the crew going past sol ' + b.sols + '.' };
+    }
+    if (b.goals !== a.goals) {
+      x = b.stars !== a.stars ? 'science star' : 'harvest'; diff = Math.abs(x === 'harvest' ? b.harv - a.harv : b.stars - a.stars);
+      return good ? { d: d, tone: 'good', text: 'It gave you ' + diff + ' more ' + x + (diff > 1 ? 's' : '') + ' than the other card.' }
+                  : { d: d, tone: 'try', text: 'Playing ' + altName + ' would have given ' + diff + ' more ' + x + (diff > 1 ? 's' : '') + '.' };
+    }
+    ['ls', 'power', 'shield'].forEach(function (b2) { x = Math.abs(b.mins[b2] - a.mins[b2]) / TUNING.max[b2]; if (x > bd) { bd = x; best = b2; } });
+    diff = r1(Math.abs(b.mins[best] - a.mins[best]));
+    return good ? { d: d, tone: 'good', text: 'It kept your lowest ' + BAR_NAMES[best] + ' ' + diff + BAR_UNITS[best] + ' higher than the other card would.' }
+                : { d: d, tone: 'try', text: 'The other card would have kept your lowest ' + BAR_NAMES[best] + ' ' + diff + BAR_UNITS[best] + ' higher.' };
+  }
+  function decisions(state) {
+    var base = state, snaps = [], s, k, j, h, others, o, alt, c, out = [], mine;
+    try {
+      s = newGame(base.seed, base.windowOpt ? { windowStart: base.windowOpt } : undefined);
+      for (k = 0; k < base.history.length; k++) { snaps.push(s); s = runPlan(s, base.history[k].played, -1); if (!s) { return []; } }
+      if (s.ls !== base.ls || s.power !== base.power || s.shield !== base.shield || s.stars !== base.stars || s.harvests !== base.harvests) { return []; }
+      mine = outcomeOf(base);
+      for (k = 0; k < base.history.length; k++) {
+        h = base.history[k]; others = (h.hand || []).filter(function (id) { return h.played.indexOf(id) < 0; });
+        for (j = 0; j < h.played.length; j++) {
+          alt = null;
+          for (o = 0; o < others.length && !alt; o++) {
+            alt = runFrom(base, k, snaps[k], j, others[o]);
+            if (alt) { c = compare(mine, outcomeOf(alt), byId[others[o]].name); c.sol = h.sol; c.played = byId[h.played[j]]; c.other = byId[others[o]]; }
+          }
+          if (alt && c.d !== 0) { out.push(c); }
+        }
+      }
+    } catch (err) { return []; }
+    out.sort(function (a, b) { return Math.abs(b.d) - Math.abs(a.d); });
+    var seen = {}, top = out.filter(function (c) { if (seen[c.text]) { return false; } seen[c.text] = 1; return true; });   // three different stories if possible
+    out.forEach(function (c) { if (top.length < 3 && top.indexOf(c) < 0) { top.push(c); } });
+    return top.slice(0, 3).map(function (c) {
+      return { sol: c.sol, tone: c.tone, text: c.text, icon: c.played.icon, name: c.played.name, otherIcon: c.other.icon, otherName: c.other.name };
+    });
+  }
+
+  function briefRank(f) { return CLASS_RANK[f.letter] * 1000 + parseFloat(f.cls.slice(1)); }   // schedule flares carry cls, not value
+  function debrief(state) {
+    if (state.phase !== 'won' && state.phase !== 'lost') { throw new Error('debrief: mission is not over'); }
+    var T = TUNING, days = state.history.length, played = state.schedule.slice(0, days), real = [], dec = decisions(state), tip, f, fact, astro, bestFl = null, rep, st, realSt, d, iss;
+    function item(sol, kind) { return reportFor(state, sol).filter(function (x) { return x.kind === kind; })[0]; }
+
+    played.forEach(function (e) { if (e.flare && (!bestFl || briefRank(e.flare) > briefRank(bestFl.flare))) { bestFl = e; } });
+    if (bestFl) {
+      rep = item(bestFl.sol, 'flare');
+      real.push({ icon: '☀️', text: 'Flares showed up on ' + played.filter(function (e) { return e.flare; }).length + ' of your ' + days + ' sols. The biggest was ' + an(bestFl.flare.cls) + bestFl.flare.cls + ' flare on ' + dateOf(bestFl.flare.time) + '.', source: rep.source });
+    } else {
+      real.push({ icon: '☀️', text: 'No flares showed up on your days. The Sun was quiet.', source: fromFeed('NASA DONKI: space weather database', data.donki.source.url, 'Real: NASA logged no C, M or X flares on your days.') });
+    }
+    st = played.filter(function (e) { return e.storm; }); realSt = st.filter(function (e) { return e.storm.real; });
+    if (st.length) {
+      rep = item(st[0].sol, 'storm');
+      real.push({ icon: '🌩️', text: 'You faced ' + st.length + ' particle storm' + (st.length > 1 ? 's' : '') + '. ' +
+        (realSt.length === st.length ? 'All came from real NASA events.' : realSt.length ? realSt.length + ' came from real NASA events. Game dice made the rest.' : 'None came from real NASA events. Game dice made them.'), source: rep.source });
+    } else {
+      real.push({ icon: '🌩️', text: 'No particle storms hit your base this time.', source: fromFeed('NASA DONKI: space weather database', data.donki.source.url, 'Real: NASA saw no storm on your days that the game used.') });
+    }
+    d = data.mars.radiation.surfaceGcrDose; iss = data.iss.typicalDay.doseEquivalentRate;
+    real.push({ icon: '🛡️', text: 'Your crew took in ' + state.totalDose + ' mSv in ' + days + ' sols. Curiosity measured ' + d.value + ' mSv every sol on Mars.',
+                source: fromCopy(d, 'Real: Curiosity RAD at Gale crater, 2012 to 2013. Jezero has no detector.') });
+    real.push({ icon: '🛰️', text: 'Astronauts on the space station took in about ' + iss.perDay.toFixed(2) + ' mSv a day in 2012.',
+                source: fromCopy(iss, 'Real: NASA RadLab, ALTEA-Survey on the station, 15 March 2012. Saved copy.') });
+    if (state.stormsHit > 0) {
+      real.push({ icon: '📚', text: 'Game storms hit harder than real ones. A big 2017 Mars storm barely changed total dose.',
+                  source: fromCopy(data.mars.radiation.september2017Storm.totalDose, 'Real: Curiosity RAD, 10 to 12 September 2017, Gale crater.') });
+    }
+
+    astro = data.osdr.filter(function (o) { return /^OSD-/.test(o.studyId) && /astronaut/.test(o.subject) && !/\bnot\b/.test(o.subject); });
+    f = astro[state.seed % astro.length];
+    fact = { text: f.kid, studyId: /OSD-\d+/.exec(f.studyId)[0], subject: f.subject,
+             source: { name: f.evidence.source, url: f.evidence.url, retrieved: f.evidence.retrieved, live: false, note: f.studyId + '. Subject: ' + f.subject + '.' } };
+
+    f = dec.filter(function (x) { return x.tone === 'try'; })[0];
+    if (f) { tip = 'Next time, on sol ' + f.sol + ', try ' + f.otherName + ' instead of ' + f.name + '.'; }
+    else if (state.result.outcome === 'won') { tip = state.result.rating < 3 ? 'Next time, keep ' + T.goals.shieldFor3Stars + ' mSv of Shield for 3 stars.' : 'Try a new mission. Every game replays different NASA days.'; }
+    else { tip = { ls: 'Next time, make air early. Use Recycler overtime or MOXIE.', power: 'Next time, clean the panels and fix broken parts early.',
+                   shield: 'Next time, build the dirt roof early.', goals: 'Next time, grow food and run experiments from the first sols.' }[state.result.reasons[0]] || 'Next time, check all three bars each sol.'; }
+    return { headline: resultText(state), decisions: dec, real: real, fact: fact, tip: tip };
+  }
+
+  return { TUNING: TUNING, CARDS: CARDS, levels: levels, hint: hint, debrief: debrief, newGame: newGame, startPlan: startPlan, canPlay: canPlay, playCard: playCard, endSol: endSol,
+           report: report, forecast: forecast, cardViews: cardViews, projectedStormHit: projectedStormHit, resultText: resultText };
+}
+/* ENGINE:END */
+</script>
+
+<script>
+/* =====================================================================
+   UI: plain DOM. All game rules live in the engine (hints, bar levels and the debrief too).
+   ===================================================================== */
+(function () {
+  'use strict';
+  if (typeof document === 'undefined') { return; }
+  if (!window.OUTPOST_DATA) {
+    document.getElementById('app').innerHTML = '<h1>Outpost 30</h1><p>data.js was not found. Put index.html and data.js in the same folder and open index.html again.</p>';
+    return;
+  }
+  var D = window.OUTPOST_DATA, DATA = D, E = createEngine(D), T = E.TUNING;   // DATA/E are swapped for the live copy if the NASA fetch works
+  var app = document.getElementById('app'), glossBox = document.getElementById('gloss');
+  var state = null, screen = 'start', backTo = 'start', feed = 'checking';   // feed: 'checking' | 'live' | 'archive'
+  var known = {}, shownWords = [], found = [], wordsHolder = null, debriefFor = null, debriefData = null;
+
+  /* ---- science words: tap any dotted word, and each new word gets a one-sentence box the first time it shows up ---- */
+  var TERMS = { 'solar conjunction': 'solarConjunction', 'radiation dose': 'radiationDose', 'particle storm': 'particleStorm', 'solar flare': 'solarFlare', 'shielding': 'shielding',
+                'moxie': 'MOXIE', 'msv': 'mSv', 'kwh': 'kWh', 'cme': 'CME', 'forbush dip': 'forbush', 'sol': 'sol', 'sols': 'sol' };
+  var TERM_RE = /\b(solar conjunction|radiation dose|particle storm|solar flare|shielding|MOXIE|mSv|kWh|CME|Forbush dip|sols?)\b/gi;
+  var LABEL = { solarConjunction: 'Solar conjunction', radiationDose: 'Radiation dose', particleStorm: 'Particle storm', solarFlare: 'Solar flare', shielding: 'Shielding',
+                MOXIE: 'MOXIE', mSv: 'mSv', kWh: 'kWh', CME: 'CME', forbush: 'Forbush dip', sol: 'Sol' };
+
+  function showGloss(key, word) {
+    known[key] = true;
+    glossBox.textContent = '';
+    var b = document.createElement('b'); b.textContent = word + ': ';
+    var sm = document.createElement('small'); sm.textContent = 'Tap to close.';
+    glossBox.appendChild(b); glossBox.appendChild(document.createTextNode(D.glossary[key])); glossBox.appendChild(sm);
+    glossBox.classList.add('show');
+  }
+  glossBox.onclick = function () { glossBox.classList.remove('show'); };
+
+  function txt(el, text) {
+    var seen = {}, last = 0, m, key, sp;
+    TERM_RE.lastIndex = 0;
+    while ((m = TERM_RE.exec(text))) {
+      key = TERMS[m[1].toLowerCase()];
+      if (!key) { continue; }
+      if (found.indexOf(key) < 0) { found.push(key); }
+      if (seen[key]) { continue; }
+      seen[key] = true;
+      el.appendChild(document.createTextNode(text.slice(last, m.index)));
+      sp = document.createElement('span');
+      sp.className = 'gl'; sp.tabIndex = 0; sp.textContent = m[1]; sp.title = D.glossary[key];
+      (function (k, w) { sp.onclick = function (ev) { ev.stopPropagation(); showGloss(k, w); }; })(key, m[1]);
+      el.appendChild(sp);
+      last = m.index + m[1].length;
+    }
+    el.appendChild(document.createTextNode(text.slice(last)));
+  }
+  function markShown() { shownWords.forEach(function (k) { known[k] = true; }); shownWords = []; }
+  function wordsPanel() {            // the first time a science word shows up, say what it means
+    var fresh = found.filter(function (k) { return !known[k]; }).slice(0, 3);
+    shownWords = fresh;
+    if (!fresh.length) { return null; }
+    var kids = [h('h2', { str: '🆕 New ' + (fresh.length > 1 ? 'words' : 'word') })];
+    fresh.forEach(function (k) { kids.push(h('p', { class: 'w' }, [h('b', { str: LABEL[k] + ': ' }), h('span', { str: D.glossary[k] })])); });
+    kids.push(h('button', { onclick: function () { markShown(); render(); }, str: 'Got it' }));
+    return h('div', { class: 'panel words' }, kids);
+  }
+
+  /* ---- tiny DOM helper. text = parsed for science words, str = plain ---- */
+  function h(tag, props, kids) {
+    var e = document.createElement(tag);
+    Object.keys(props || {}).forEach(function (k) {
+      var v = props[k];
+      if (k === 'class') { e.className = v; } else if (k === 'text') { txt(e, v); } else if (k === 'str') { e.textContent = v; } else if (k === 'onclick') { e.onclick = v; }
+      else if (k === 'disabled') { e.disabled = !!v; } else { e.setAttribute(k, v); }
+    });
+    (kids || []).forEach(function (c) { if (c) { e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); } });
+    return e;
+  }
+  function link(url, label, tip) { return url ? h('a', { href: url, target: '_blank', rel: 'noopener', title: tip || '' }, [label || 'source']) : null; }
+  function sign(n) { return (n > 0 ? '+' : n < 0 ? '−' : '±') + Math.abs(n); }
+
+  function newSeed() {
+    var m = /[?&]seed=(\d+)/.exec(location.search);
+    return m ? Number(m[1]) : Math.floor(Math.random() * 4294967296);
+  }
+  function start() { markShown(); state = E.newGame(newSeed()); screen = 'game'; render(); window.scrollTo(0, 0); }
+  function act(fn) { markShown(); state = fn(state); if (state.phase === 'won' || state.phase === 'lost') { screen = 'end'; } render(); if (screen === 'end' || state.phase === 'morning') { window.scrollTo(0, 0); } }
+
+  /* ---- where the space weather came from ---- */
+  function runLabel() {                  // never says "live" unless the live fetch worked
+    if (DATA.meta.mode === 'live') { return DATA.meta.sourceLabel; }
+    var sch = state && state.schedule;
+    return sch ? 'Real NASA data from ' + sch[0].date + ' to ' + sch[sch.length - 1].date + ' (archived)' : DATA.meta.sourceLabel;
+  }
+  function badge() {
+    if (feed === 'checking') { return h('span', { class: 'badge', str: 'Checking NASA for live data...' }); }
+    return h('span', { class: 'badge ' + (DATA.meta.mode === 'live' ? 'live' : 'archive'), str: runLabel() });
+  }
+  function whence(s) {                   // the "Where does this come from?" button + its panel
+    if (!s) { return null; }
+    var panel = h('div', { class: 'whence' }, [
+      s.note ? h('p', { text: s.note }) : null,
+      h('p', { class: 'dim', str: 'Source: ' + s.name + '. ' + (s.live ? 'Fetched live from NASA on ' : 'Saved copy, retrieved ') + s.retrieved + '.' }),
+      s.url ? h('p', {}, [link(s.url, 'Open the source page ↗')]) : h('p', { class: 'dim', str: 'This one has no web page.' })
+    ]);
+    var btn = h('button', { class: 'src', 'aria-expanded': 'false', str: 'Where does this come from?' });
+    btn.onclick = function () { btn.setAttribute('aria-expanded', panel.classList.toggle('open') ? 'true' : 'false'); };
+    return h('div', {}, [btn, panel]);
+  }
+  function openSources() { markShown(); if (screen !== 'sources') { backTo = screen; } screen = 'sources'; render(); window.scrollTo(0, 0); }
+
+  /* ---- try NASA DONKI for the last 30 days; any problem means "use the archive" ---- */
+  function loadLive() {
+    if (!D.live || typeof fetch !== 'function' || (typeof navigator !== 'undefined' && navigator.onLine === false)) { return Promise.resolve(null); }
+    var today = new Date().toISOString().slice(0, 10), win = D.live.window(today);
+    function get(kind) {
+      var ctl = typeof AbortController === 'function' ? new AbortController() : null,
+          timer = setTimeout(function () { if (ctl) { ctl.abort(); } }, 8000);
+      return fetch(D.live.urlFor(kind, win), ctl ? { signal: ctl.signal } : {})
+        .then(function (r) { if (!r.ok) { throw new Error(kind + ' ' + r.status); } return r.text(); })
+        .then(function (t) { var j = t.trim() ? JSON.parse(t) : []; if (!Array.isArray(j)) { throw new Error(kind + ' is not a list'); } return j; })
+        .then(function (v) { clearTimeout(timer); return v; }, function (err) { clearTimeout(timer); throw err; });
+    }
+    return Promise.all([get('FLR'), get('CME'), get('SEP')])
+      .then(function (a) { return D.live.build({ FLR: a[0], CME: a[1], SEP: a[2] }, today); })
+      .catch(function () { return null; });
+  }
+
+  /* ---- Kip, the guide: an original character. Round cratered helmet, three chest lights that copy the three bars ---- */
+  var INK = '#17224d', EYE = '#7be0ff', LIGHT = { ls: '#1d9bf0', power: '#ffc623', shield: '#7447ff' };
+  function kipSvg(mood, lv) {
+    function light(k) { var l = lv && lv[k]; return l === 'danger' ? '#e0262d' : l === 'low' ? '#ffb000' : LIGHT[k]; }
+    var st = 'stroke="' + INK + '" stroke-width="4" stroke-linejoin="round"', eye = 'fill="' + EYE + '"', ln = 'stroke="' + EYE + '" stroke-width="3.2" stroke-linecap="round" fill="none"', face;
+    if (mood === 'happy') {
+      face = '<path d="M34 53 Q39 45 44 53" ' + ln + '/><path d="M56 53 Q61 45 66 53" ' + ln + '/><path d="M41 57 Q50 70 59 57 Z" ' + eye + '/>';
+    } else if (mood === 'worried') {
+      face = '<circle cx="39" cy="52" r="4.5" ' + eye + '/><circle cx="61" cy="52" r="4.5" ' + eye + '/><path d="M33 46 L44 41" ' + ln + '/><path d="M67 46 L56 41" ' + ln + '/><path d="M43 64 Q50 57 57 64" ' + ln + '/>';
+    } else if (mood === 'alert') {
+      face = '<circle cx="39" cy="49" r="6.5" ' + eye + '/><circle cx="61" cy="49" r="6.5" ' + eye + '/><circle cx="39" cy="49" r="2.4" fill="' + INK + '"/><circle cx="61" cy="49" r="2.4" fill="' + INK + '"/><ellipse cx="50" cy="62" rx="3.6" ry="4.6" ' + eye + '/>';
+    } else {
+      face = '<circle cx="39" cy="50" r="4.5" ' + eye + '/><circle cx="61" cy="50" r="4.5" ' + eye + '/><path d="M43 59 Q50 65 57 59" ' + ln + '/>';
+    }
+    return '<svg viewBox="0 -10 100 134" xmlns="http://www.w3.org/2000/svg" focusable="false">' +
+      '<rect x="31" y="111" width="17" height="11" rx="5.5" fill="#ff7a3d" ' + st + '/><rect x="52" y="111" width="17" height="11" rx="5.5" fill="#ff7a3d" ' + st + '/>' +
+      '<rect x="26" y="74" width="48" height="43" rx="16" fill="#fff" ' + st + '/>' +
+      '<ellipse cx="20" cy="95" rx="8" ry="11" fill="#fff" ' + st + '/><ellipse cx="80" cy="95" rx="8" ry="11" fill="#fff" ' + st + '/>' +
+      '<rect x="35" y="88" width="30" height="17" rx="6" fill="' + INK + '"/>' +
+      '<circle cx="42" cy="96.5" r="3.8" fill="' + light('ls') + '"/><circle cx="50" cy="96.5" r="3.8" fill="' + light('power') + '"/><circle cx="58" cy="96.5" r="3.8" fill="' + light('shield') + '"/>' +
+      '<ellipse cx="50" cy="79" rx="24" ry="6.5" fill="#ff7a3d" ' + st + '/>' +
+      '<line x1="50" y1="11" x2="50" y2="0" ' + st + '/><circle cx="50" cy="-3" r="5.5" fill="#ffc623" ' + st + '/>' +
+      '<ellipse cx="50" cy="44" rx="37" ry="35" fill="#fff" ' + st + '/>' +
+      '<circle cx="27" cy="23" r="3.2" fill="#cfd9f5"/><circle cx="70" cy="19" r="2.4" fill="#cfd9f5"/><circle cx="77" cy="31" r="3.4" fill="#cfd9f5"/>' +
+      '<rect x="19" y="31" width="62" height="37" rx="18.5" fill="' + INK + '"/><ellipse cx="31" cy="38.5" rx="7" ry="3" fill="#fff" opacity=".55" transform="rotate(-20 31 38.5)"/>' + face + '</svg>';
+  }
+  function guide(mood, text, big) {
+    var k = h('span', { class: 'kip', 'aria-hidden': 'true' });
+    k.innerHTML = kipSvg(mood, state ? E.levels(state) : null);          // static strings only, nothing from the player or the network
+    return h('div', { class: 'guide mood-' + mood + (big ? ' big-kip' : '') }, [k,
+      h('div', { class: 'bubble', 'aria-live': 'polite' }, [h('b', { class: 'who', str: 'Kip, your guide' }), h('span', { text: text })])]);
+  }
+
+  /* ---- bars: icon + number + bar + a word when it gets low ---- */
+  var TILES = [{ k: 'ls', icon: '💨', label: 'Life Support', unit: '' }, { k: 'power', icon: '⚡', label: 'Power', unit: 'kWh' }, { k: 'shield', icon: '🛡️', label: 'Shield', unit: 'mSv' }];
+  function tile(t, lv) {
+    var val = state[t.k], level = lv[t.k], max = T.max[t.k], shown = t.k === 'shield' ? (val > 0 ? Math.max(0.1, Math.round(val * 10) / 10) : 0) : Math.round(val);
+    var pct = val > 0 ? Math.max(3, Math.min(100, val / max * 100)) : 0;
+    return h('div', { class: 'tile lv-' + level + ' k-' + t.k, role: 'img', 'aria-label': t.label + ' ' + shown + (t.unit ? ' ' + t.unit : ' percent') + (level === 'ok' ? '' : ', ' + (level === 'low' ? 'low' : 'danger')) }, [
+      h('div', { class: 'row' }, [h('span', { class: 'ico', 'aria-hidden': 'true', str: t.icon }), level === 'ok' ? null : h('span', { class: 'tag', str: level === 'low' ? 'Low' : 'Danger!' })]),
+      h('div', { class: 'num', str: shown + (t.k === 'ls' ? '%' : '') }),
+      h('div', { class: 'track', 'aria-hidden': 'true' }, [h('div', { class: 'fill', style: 'width:' + pct + '%' })]),
+      h('div', { class: 'lbl', text: t.label + (t.unit ? ' (' + t.unit + ')' : '') })
+    ]);
+  }
+  function hud(sticky) {
+    var lv = E.levels(state);
+    return h('div', { class: 'hud' + (sticky ? '' : ' plain') }, TILES.map(function (t) { return tile(t, lv); }));
+  }
+  function goalsRow() {
+    var c = [], e = state.schedule[Math.min(state.sol, T.sols) - 1];
+    if (state.failures.indexOf('recycler') >= 0) { c.push('🔧 Recycler broken'); }
+    if (state.failures.indexOf('panel') >= 0) { c.push('🔧 Solar string broken'); }
+    if (e.dust && state.phase !== 'won' && state.phase !== 'lost') { c.push('🟤 Dust storm'); }
+    if (state.roofBuilt) { c.push('🧱 Dirt roof'); }
+    if (state.wallArmed) { c.push('💧 Water wall ready'); }
+    if (state.panelsClean) { c.push('🧹 Panels clean'); }
+    if (state.forbushLeft > 0) { c.push('Fewer space rays for ' + state.forbushLeft + ' sol' + (state.forbushLeft > 1 ? 's' : '')); }
+    return h('div', {}, [
+      h('div', { class: 'goals' }, [h('span', { class: 'goal', str: '⭐ Stars ' + state.stars + '/' + T.goals.stars }), h('span', { class: 'goal', str: '🌱 Harvests ' + state.harvests + '/' + T.goals.harvests })]),
+      c.length ? h('div', { class: 'chips' }, c.map(function (t) { return h('span', { class: 'chip', text: t }); })) : null
+    ]);
+  }
+
+  /* ---- morning report ---- */
+  function evItem(it, future) {
+    var kids = [h('span', { class: 'ic', 'aria-hidden': 'true', str: it.icon }), h('div', {}, [
+      h('div', { class: 'ttl' }, [h('span', { text: it.title }), h('span', { class: 'pill ' + (it.real ? 'real' : 'game'), str: it.real ? 'Real NASA data' : 'Game event' })]),
+      h('div', { text: it.text }),
+      it.hit && !future ? h('div', { class: 'hit', str: 'Right now this storm would cost your Shield ' + E.projectedStormHit(state) + ' mSv.' }) : null,
+      h('div', { class: 'stamp', text: it.stamp }), whence(it.source)])];
+    return h('div', { class: 'ev ' + it.kind }, kids);
+  }
+  function reportPanel() {
+    var items = E.report(state), kids = [h('h2', { str: 'Morning report' })];
+    if (state.lastSunset && state.sol > 1) {
+      var L = state.lastSunset;
+      kids.push(h('div', { class: 'lastsun' }, [h('span', { class: 'dim', str: 'Last sunset:' }),
+        h('span', { class: 'd', str: '💨 ' + sign(L.dLs) + '%' }), h('span', { class: 'd', str: '⚡ ' + sign(L.dPower) + ' kWh' }), h('span', { class: 'd', str: '🛡️ ' + sign(L.dShield) + ' mSv' })]));
+      if (L.notes.length) { kids.push(h('p', { class: 'dim', text: L.notes.join('. ') + '.' })); }
+    }
+    if (!items.length) { kids.push(h('p', { str: 'A quiet morning. Nothing special in the sky today.' })); }
+    items.forEach(function (it) { kids.push(evItem(it)); });
+    var fc = E.forecast(state);
+    if (fc.length) {
+      kids.push(h('h2', { str: '📡 Message from Earth' }));
+      fc.forEach(function (f) {
+        kids.push(h('p', { text: 'Sol ' + f.sol + ' (real date ' + f.date + '):' }));
+        if (!f.items.length) { kids.push(h('p', { class: 'dim', str: 'Quiet day.' })); }
+        f.items.forEach(function (it) { kids.push(evItem(it, true)); });
+      });
+    }
+    return h('div', { class: 'panel' }, kids);
+  }
+
+  /* ---- cards ---- */
+  function cardEl(v) {
+    var kids = [
+      h('div', { class: 'head' }, [h('span', { class: 'cico', 'aria-hidden': 'true', str: v.icon }), h('div', { class: 'name', str: v.name })]),
+      h('div', { text: v.text }),
+      h('div', { class: 'ln cost' }, [h('b', { str: 'Costs: ' }), h('span', { text: v.costText })]),
+      v.gainText ? h('div', { class: 'ln gain' }, [h('b', { str: 'Gives: ' }), h('span', { text: v.gainText })]) : null,
+      v.anchor ? h('div', { class: 'anchor' }, [h('span', { text: v.anchor.text }), whence(v.anchor.source)]) : null,
+      v.reason ? h('div', { class: 'why', str: '⚠ ' + v.reason }) : null,
+      h('button', { disabled: v.played || !v.canPlay, onclick: function () { act(function (s) { return E.playCard(s, v.id); }); }, str: v.played ? 'Played ✓' : 'Play this card' })
+    ];
+    return h('div', { class: 'card' + (v.played ? ' played' : '') }, kids);
+  }
+  function logPanel() {
+    var mine = state.log.filter(function (l) { return l.sol === state.sol; });
+    if (!mine.length) { return null; }
+    return h('div', { class: 'panel log' }, mine.map(function (l) { return h('div', {}, [h('p', { text: l.text }), whence(l.source)]); }));
+  }
+  function footer() {
+    return h('footer', { class: 'dim' }, [h('p', {}, [badge()]), h('p', { text: DATA.meta.notLive }), h('p', { str: DATA.meta.credit }),
+      h('p', { str: 'Costs, power numbers and chances are game numbers, not real measurements.' }),
+      h('p', {}, [h('button', { class: 'link', onclick: openSources, str: 'Data sources: every dataset and link' })])]);
+  }
+
+  /* ---- screens ---- */
+  function startScreen() {
+    return h('div', {}, [
+      h('div', { class: 'hero' }, [h('div', { class: 'ttl' }, [h('h1', {}, ['🪐 Outpost ', h('span', { str: '30' })]), h('p', { class: 'dim', str: 'Junior Astronaut Mission Trainer' })]), guide('happy', 'Hi, I am Kip! I will help you keep the base alive.', true)]),
+      wordsHolder,
+      h('div', { class: 'panel' }, [
+        h('h2', { str: 'Your mission' }),
+        h('p', { text: 'You and a crewmate live at Jezero crater on Mars. Keep the base alive for 30 sols.' }),
+        h('ol', { class: 'steps' }, [h('li', { str: 'Read the morning report.' }), h('li', { str: 'Pick 2 of your 3 cards.' }), h('li', { str: 'Press sunset. The base uses air, power and Shield.' })]),
+        h('p', { str: 'Every card costs something. There is no free safe choice!' })
+      ]),
+      h('div', { class: 'panel' }, [
+        h('h2', { str: 'How to win' }),
+        h('p', { text: 'Reach sol 30 with all bars above 0.' }),
+        h('p', { str: 'Also collect ⭐ 3 science stars and 🌱 5 harvests.' }),
+        h('p', { text: 'Shield is how much radiation dose your crew can still take. It is counted in mSv.' }),
+        h('p', { text: DATA.meta.mode === 'live' ? 'The space weather is real. This game replays the last 30 days of NASA data.' : 'The space weather is real. Every game replays 30 days of NASA data.' }),
+        h('p', {}, [badge()])
+      ]),
+      h('button', { class: 'big', disabled: feed === 'checking', onclick: start, str: feed === 'checking' ? 'Contacting NASA...' : 'Start mission' }),
+      footer()
+    ]);
+  }
+
+  function gameScreen() {
+    var e = state.schedule[state.sol - 1], g = E.hint(state), act2 = [];
+    if (state.phase === 'morning') {
+      act2.push(h('button', { class: 'big', onclick: function () { act(E.startPlan); }, str: 'Plan the sol' }));
+    } else {
+      var left = state.required - state.picks.length;
+      act2.push(h('h2', { class: 'pick', str: state.phase === 'plan' ? 'Pick ' + left + ' card' + (left > 1 ? 's' : '') + '. No skipping!' : 'Cards played. Ready for sunset!' }));
+      act2.push(h('div', { class: 'cards' }, E.cardViews(state).map(cardEl)));
+      act2.push(logPanel());
+      if (state.phase === 'sunsetReady') { act2.push(h('button', { class: 'big', onclick: function () { act(E.endSol); }, str: '🌅 Sunset: end the sol' })); }
+    }
+    return h('div', {}, [
+      h('div', { class: 'top' }, [
+        h('div', { class: 'sol', text: 'Sol ' + state.sol + ' of ' + T.sols }),
+        h('div', { class: 'dim', str: 'Real NASA day ' + e.date + (DATA.meta.mode === 'live' ? ' (last 30 days)' : ' (archive, not live)') })
+      ]),
+      h('div', { class: 'solbar', 'aria-hidden': 'true' }, [h('i', { style: 'width:' + (state.sol - 1) / T.sols * 100 + '%' })]),
+      hud(true), goalsRow(), guide(g.mood, g.text), wordsHolder,
+      h('div', { class: 'play' }, [h('div', {}, [reportPanel()]), h('div', { class: 'act' }, act2)]),
+      footer()
+    ]);
+  }
+
+  function debriefOnce() {
+    if (debriefFor !== state) { debriefFor = state; try { debriefData = E.debrief(state); } catch (err) { debriefData = null; } }
+    return debriefData;
+  }
+  function endScreen() {
+    var won = state.result.outcome === 'won', stars = '', g = E.hint(state), d = debriefOnce(), i;
+    for (i = 0; i < 3; i++) { stars += i < state.result.rating ? '★' : '☆'; }
+    var left = [], right = [];
+    if (d) {
+      left.push(h('h2', { str: '3 choices that mattered most' }));
+      if (!d.decisions.length) { left.push(h('p', { str: 'This mission was too short to compare choices.' })); }
+      d.decisions.forEach(function (x) {
+        left.push(h('div', { class: 'dec ' + x.tone }, [
+          h('div', { class: 'verdict', str: x.tone === 'good' ? '✅ This choice helped' : '🔁 Try the other card' }),
+          h('div', { class: 'dt' }, [h('b', { str: 'Sol ' + x.sol + ': ' + x.icon + ' ' + x.name }), h('div', { class: 'dim', str: 'instead of ' + x.otherIcon + ' ' + x.otherName })]),
+          h('p', { text: x.text })]));
+      });
+      left.push(h('div', { class: 'panel' }, [h('h2', { str: '🧑‍🚀 A real astronaut fact' }), h('p', { text: d.fact.text }),
+        h('p', { class: 'dim', str: 'From NASA OSDR study ' + d.fact.studyId + '. Who: ' + d.fact.subject + '.' }), whence(d.fact.source)]));
+      right.push(h('h2', { str: 'What the real NASA data showed' }));
+      d.real.forEach(function (r) { right.push(h('div', { class: 'rd' }, [h('span', { class: 'ic', 'aria-hidden': 'true', str: r.icon }), h('div', {}, [h('div', { text: r.text }), whence(r.source)])])); });
+      right.push(h('p', { class: 'dim', text: DATA.meta.mode === 'live' ? 'Space weather: fetched live, replayed as game days.' : 'Space weather: archived copy. Replayed, not live.' }));
+      right.push(guide(won ? 'happy' : 'calm', d.tip));
+    }
+    return h('div', { class: 'end ' + (won ? 'win' : 'lose') }, [
+      h('div', { class: 'hero' }, [h('div', { class: 'ttl' }, [h('h1', { str: won ? '🎉 Mission complete!' : '🚀 Mission ended' }), won ? h('p', { class: 'stars', 'aria-label': state.result.rating + ' of 3 stars', str: stars }) : null]), guide(g.mood, g.text, true)]),
+      wordsHolder,
+      h('div', { class: 'panel' }, [h('p', { text: E.resultText(state) }),
+        won && state.result.rating < 3 ? h('p', { class: 'dim', str: 'Keep at least ' + T.goals.shieldFor3Stars + ' mSv of Shield for 3 stars.' }) : null]),
+      h('div', { class: 'stats' }, [
+        h('div', { class: 'stat' }, [h('b', { str: String(state.history.length) }), h('span', { text: 'sols you lasted' })]),
+        h('div', { class: 'stat' }, [h('b', { str: state.stars + ' ⭐' }), h('span', { str: 'science stars' })]),
+        h('div', { class: 'stat' }, [h('b', { str: state.harvests + ' 🌱' }), h('span', { str: 'harvests' })]),
+        h('div', { class: 'stat' }, [h('b', { str: state.totalDose + ' mSv' }), h('span', { text: 'radiation dose' })])
+      ]),
+      hud(false),
+      h('div', { class: 'deb' }, [h('div', {}, left), h('div', {}, right)]),
+      h('button', { class: 'big', onclick: start, str: 'Play again' }),
+      footer()
+    ]);
+  }
+
+  function sourcesScreen() {
+    var live = DATA.meta.mode === 'live', win = DATA.meta.window, c = DATA.counts, feedKids;
+    if (feed === 'checking') {
+      feedKids = [h('p', { str: 'Still asking NASA for the last ' + D.live.days + ' days of space weather...' })];
+    } else if (live) {
+      feedKids = [h('p', { str: 'Your browser asked NASA DONKI on ' + DATA.meta.fetched + ' for ' + win.start + ' to ' + win.end + '.' }),
+        h('p', { text: 'It got ' + c.flares + ' flares, ' + c.cmes + ' CMEs and ' + c.seps + ' particle events.' }),
+        h('p', { str: 'These are the three requests:' }),
+        h('ul', { class: 'feedurls' }, ['FLR', 'CME', 'SEP'].map(function (k) { var u = D.live.urlFor(k, win); return h('li', {}, [link(u, u)]); }))];
+    } else {
+      feedKids = [h('p', { str: 'The live request failed, or you are offline.' }), h('p', { str: 'The game uses the saved NASA DONKI copy.' }),
+        h('p', { text: 'It has ' + c.flares + ' flares, ' + c.cmes + ' CMEs and ' + c.seps + ' particle events.' }), h('p', { str: 'They cover ' + win.start + ' to ' + win.end + '.' })];
+    }
+    var kids = [
+      h('h1', { str: 'Data sources' }),
+      h('button', { class: 'quiet', onclick: function () { screen = backTo; render(); window.scrollTo(0, 0); }, str: '← Back' }),
+      h('div', { class: 'panel' }, [h('h2', { str: 'Space weather right now' }), h('p', {}, [badge()])].concat(feedKids)),
+      h('p', { class: 'dim', str: 'Everything below is a saved copy from ' + D.meta.retrieved + '. Only the space weather above can be LIVE.' }),
+      h('p', { class: 'dim', str: 'Costs, power numbers and chances are game numbers.' })
+    ];
+    D.datasets.forEach(function (d) {
+      kids.push(h('div', { class: 'panel ds' }, [
+        h('h2', { str: d.title }),
+        h('p', { text: d.kid }),
+        h('p', { class: 'dim', text: 'Used for: ' + d.usedFor }),
+        h('p', { class: 'dim', str: d.feed && live ? 'Fetched live on ' + DATA.meta.fetched + '.' : 'Saved copy (archive), retrieved ' + D.meta.retrieved + '. Not live.' }),
+        h('ul', {}, d.links.map(function (l) { return h('li', {}, [link(l.url, l.name)]); }))
+      ]));
+    });
+    return h('div', {}, kids);
+  }
+
+  function render() {
+    found = []; wordsHolder = h('div', {});
+    app.textContent = '';
+    app.appendChild(screen === 'start' ? startScreen() : screen === 'end' ? endScreen() : screen === 'sources' ? sourcesScreen() : gameScreen());
+    if (screen !== 'sources') { var wp = wordsPanel(); if (wp) { wordsHolder.appendChild(wp); } } else { shownWords = []; }
+  }
+  loadLive().then(function (live) {
+    try {
+      if (live) { var eng = createEngine(live); DATA = live; E = eng; T = E.TUNING; feed = 'live'; } else { feed = 'archive'; }
+    } catch (err) { feed = 'archive'; }
+    if (screen === 'start' || screen === 'sources') { render(); }
+  });
+  render();
+})();
+</script>
+</body>
+</html>

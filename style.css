@@ -1,0 +1,151 @@
+/* Design: a training worksheet. Graph-paper sky, ink outlines, hard sticker shadows.
+   Light on purpose: it stays readable on a washed-out classroom projector and in sunlight on a phone.
+   Danger is never colour alone: stripes + a word + a pulse. */
+:root { --ink:#17224d; --ink2:#434f80; --paper:#e8f0ff; --grid:#d3e1fb; --panel:#fff; --rust:#ff7a3d; --rustd:#b83d05;
+        --ls:#1d9bf0; --pw:#ffc623; --sh:#7447ff; --ok:#0b8a4f; --okbg:#d9f7e6; --warn:#ffb000; --warnbg:#fff1c4; --bad:#e0262d; --badbg:#ffe0e1;
+        --r:1.1rem; --line:3px solid var(--ink); }
+* { box-sizing:border-box; }
+html { font-size:clamp(17px, .9vw + 11px, 28px); -webkit-text-size-adjust:100%; }
+body { margin:0; color:var(--ink); background:var(--paper); background-image:linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px); background-size:2rem 2rem;
+       font:1rem/1.45 ui-rounded, "SF Pro Rounded", "Arial Rounded MT Bold", "Nunito", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif; }
+#app { max-width:66rem; margin:0 auto; padding:0 .9rem 1rem; }
+h1 { font-size:2.5rem; line-height:1.05; margin:.6rem 0 .2rem; font-weight:900; letter-spacing:-.01em; }
+h2 { font-size:1.35rem; margin:0 0 .5rem; font-weight:800; }
+p { margin:.4rem 0; }
+b { font-weight:800; }
+a { color:var(--ink); text-underline-offset:.15em; }
+.dim { color:var(--ink2); font-size:.9rem; }
+:focus-visible { outline:.25rem solid var(--ink); outline-offset:.2rem; border-radius:.4rem; }
+
+.panel { background:var(--panel); border:var(--line); border-radius:var(--r); padding:.8rem 1rem; margin:.8rem 0; box-shadow:0 .28rem 0 var(--ink); }
+
+/* buttons: big, with a visible press */
+button { font:inherit; font-weight:800; color:var(--ink); background:var(--rust); border:var(--line); border-radius:var(--r); min-height:3.3rem; padding:.55rem 1.3rem;
+         box-shadow:0 .28rem 0 var(--ink); cursor:pointer; transition:transform .08s, box-shadow .08s; touch-action:manipulation; }
+button:active:not(:disabled) { transform:translateY(.22rem); box-shadow:0 .06rem 0 var(--ink); }
+button:disabled { background:#dde3f4; color:#5d678f; box-shadow:none; cursor:not-allowed; transform:translateY(.1rem); }
+button.big { display:block; width:100%; min-height:4.4rem; font-size:1.4rem; margin:.9rem 0; }
+button.quiet { background:#fff; }
+button.src { min-height:2.75rem; font-size:.9rem; padding:.3rem .9rem; margin:.5rem 0 0; background:#fff; box-shadow:0 .18rem 0 var(--ink); }
+button.link { background:none; border:0; box-shadow:none; min-height:2.75rem; padding:.3rem .2rem; font-size:.95rem; font-weight:700; text-decoration:underline; color:var(--ink2); }
+
+/* header + resource tiles (sticky so the bars stay in view while you choose cards) */
+.top { display:flex; flex-wrap:wrap; align-items:baseline; justify-content:space-between; gap:.2rem .8rem; padding-top:.7rem; }
+.sol { font-size:1.9rem; font-weight:900; }
+.solbar { height:.7rem; border:2px solid var(--ink); border-radius:99px; background:#fff; overflow:hidden; margin:.3rem 0 .1rem; }
+.solbar > i { display:block; height:100%; background:var(--ink); }
+.hud { display:grid; grid-template-columns:repeat(3, 1fr); gap:.55rem; position:sticky; top:0; z-index:5; padding:.55rem 0 .5rem; background:var(--paper); margin-top:.4rem; }
+.hud.plain { position:static; }
+.tile { background:var(--panel); border:var(--line); border-radius:var(--r); padding:.4rem .55rem .5rem; box-shadow:0 .2rem 0 var(--ink); min-width:0; }
+.tile .row { display:flex; align-items:center; justify-content:space-between; gap:.3rem; min-height:1.9rem; }
+.tile .ico { font-size:1.6rem; line-height:1; }
+.tile .num { font-size:2.1rem; font-weight:900; line-height:1.05; font-variant-numeric:tabular-nums; }
+.tile .track { height:1rem; border:2px solid var(--ink); border-radius:99px; background:#fff; overflow:hidden; margin:.25rem 0; }
+.tile .fill { height:100%; transition:width .35s; }
+.k-ls .fill { background:var(--ls); } .k-power .fill { background:var(--pw); } .k-shield .fill { background:var(--sh); }
+.tile .lbl { font-size:.88rem; font-weight:700; line-height:1.2; }
+.tag { font-size:.8rem; font-weight:900; border-radius:99px; padding:.05rem .55rem; border:2px solid var(--ink); background:var(--warn); color:var(--ink); white-space:nowrap; }
+.lv-low { background:var(--warnbg); }
+.lv-low .fill { background-image:repeating-linear-gradient(135deg, var(--warn) 0 .45rem, #ffe08a .45rem .9rem) !important; background-color:var(--warn) !important; }
+.lv-danger { background:var(--badbg); animation:throb 1.2s ease-in-out infinite; }
+.lv-danger .fill { background-image:repeating-linear-gradient(135deg, var(--bad) 0 .45rem, #ff9a9e .45rem .9rem) !important; background-color:var(--bad) !important; }
+.lv-danger .tag { background:var(--bad); color:#fff; }
+@keyframes throb { 50% { transform:scale(1.035); } }
+
+.goals { display:flex; flex-wrap:wrap; gap:.5rem; margin:.3rem 0 0; }
+.goal { background:#fff; border:var(--line); border-radius:99px; padding:.25rem .9rem; font-weight:800; font-size:1.1rem; }
+.chips { display:flex; flex-wrap:wrap; gap:.4rem; margin-top:.5rem; }
+.chip { background:#fff; border:2px solid var(--ink); border-radius:99px; padding:.1rem .7rem; font-size:.88rem; font-weight:700; }
+
+/* the guide */
+.guide { display:flex; align-items:flex-end; gap:.6rem; margin:.8rem 0 .4rem; }
+.kip { flex:none; width:5.2rem; }
+.kip svg { display:block; width:100%; height:auto; overflow:visible; }
+.bubble { position:relative; flex:1; background:#fff; border:var(--line); border-radius:var(--r); padding:.6rem .9rem .7rem; font-size:1.15rem; font-weight:700; line-height:1.3; box-shadow:0 .28rem 0 var(--ink); margin-bottom:.9rem; }
+.bubble::before { content:""; position:absolute; left:-.62rem; bottom:1.1rem; width:.9rem; height:.9rem; background:inherit; border-left:var(--line); border-bottom:var(--line); transform:rotate(45deg); }
+.bubble .who { display:block; font-size:.85rem; color:var(--ink2); font-weight:800; }
+.mood-worried .bubble { background:var(--warnbg); } .mood-alert .bubble { background:#ffe3d1; } .mood-happy .bubble { background:var(--okbg); }
+.big-kip .kip { width:8rem; }
+
+/* new words */
+.words { background:#ece6ff; }
+.words .w { margin:.35rem 0; font-size:1.05rem; }
+.words h2 { font-size:1.15rem; }
+.words button { min-height:2.9rem; margin-top:.4rem; background:#fff; }
+
+/* morning report */
+.ev { display:grid; grid-template-columns:2.2rem 1fr; gap:.2rem .6rem; border-left:.5rem solid var(--ink2); padding:.3rem 0 .3rem .6rem; margin:.6rem 0; }
+.ev .ic { font-size:1.7rem; line-height:1.1; }
+.ev .ttl { font-weight:900; font-size:1.15rem; display:flex; flex-wrap:wrap; gap:.2rem .6rem; align-items:center; }
+.ev.storm { border-color:var(--bad); } .ev.flare { border-color:var(--warn); } .ev.conj, .ev.dust { border-color:var(--ink2); } .ev.failure { border-color:var(--rust); }
+.pill { white-space:nowrap; flex:none; font-size:.78rem; font-weight:800; border:2px solid var(--ink); border-radius:99px; padding:0 .55rem; background:#fff; }
+.pill.real { background:var(--okbg); } .pill.game { background:#eceef7; }
+.stamp { color:var(--ink2); font-size:.88rem; }
+.hit { font-weight:800; color:#8f1217; }
+.lastsun { display:flex; flex-wrap:wrap; gap:.4rem .9rem; align-items:center; font-weight:800; }
+.lastsun span.d { background:#eef2fd; border-radius:99px; padding:.05rem .7rem; }
+.whence { display:none; background:#eef2fd; border:2px solid var(--ink); border-radius:.8rem; padding:.2rem .8rem; margin-top:.5rem; font-size:.9rem; }
+.whence.open { display:block; }
+.whence a, .ds a, .feedurls a { word-break:break-word; }
+
+/* cards */
+.pick { font-size:1.5rem; margin:.9rem 0 .2rem; }
+.cards { display:grid; grid-template-columns:1fr; gap:.9rem; margin:.5rem 0; }
+.card { background:#fff; border:var(--line); border-radius:var(--r); padding:.75rem .9rem .9rem; box-shadow:0 .28rem 0 var(--ink); display:flex; flex-direction:column; gap:.45rem; }
+.card.played { background:var(--okbg); }
+.card .head { display:flex; align-items:center; gap:.6rem; }
+.card .cico { font-size:2.5rem; line-height:1; }
+.card .name { font-size:1.35rem; font-weight:900; line-height:1.15; }
+.card .ln { border-radius:.7rem; padding:.3rem .65rem; font-weight:700; border:2px solid var(--ink); }
+.card .cost { background:var(--badbg); } .card .gain { background:var(--okbg); }
+.card .anchor { font-size:.88rem; color:var(--ink2); }
+.card .why { background:var(--warnbg); border:2px solid var(--ink); border-radius:.7rem; padding:.25rem .65rem; font-weight:800; font-size:.95rem; }
+.card > button { margin-top:auto; width:100%; min-height:3.6rem; font-size:1.15rem; }
+.log { font-size:.95rem; }
+.log p { margin:.25rem 0; }
+
+#gloss { position:fixed; left:50%; bottom:.9rem; transform:translateX(-50%); max-width:36rem; width:calc(100% - 1.6rem); background:#fff; color:var(--ink); border:var(--line); border-radius:var(--r);
+         padding:.8rem 1rem; box-shadow:0 .28rem 0 var(--ink); display:none; z-index:9; font-size:1.1rem; }
+#gloss.show { display:block; }
+#gloss small { display:block; color:var(--ink2); margin-top:.2rem; font-size:.85rem; }
+.gl { border-bottom:3px dotted var(--ink2); cursor:help; }
+
+/* start + debrief */
+.hero { display:flex; flex-wrap:wrap; align-items:center; gap:.5rem 1.2rem; padding-top:1rem; }
+.hero .ttl { flex:1; min-width:13rem; }
+.hero h1 { color:var(--ink); }
+.hero h1 span { color:var(--rustd); }
+.steps { list-style:none; counter-reset:s; padding:0; margin:.4rem 0 0; }
+.steps li { counter-increment:s; display:flex; align-items:center; gap:.7rem; margin:.45rem 0; font-size:1.15rem; font-weight:700; }
+.steps li::before { content:counter(s); flex:none; width:2.1rem; height:2.1rem; border-radius:50%; border:var(--line); background:var(--rust); display:grid; place-items:center; font-weight:900; }
+.badge { display:inline-block; border-radius:99px; padding:.15rem .8rem; font-size:.9rem; font-weight:800; background:#fff; border:2px solid var(--ink); }
+.badge.live { background:var(--okbg); } .badge.archive { background:var(--warnbg); }
+.end h1 { font-size:2.6rem; }
+.stars { font-size:2.4rem; letter-spacing:.2rem; margin:0; }
+.stats { display:grid; grid-template-columns:repeat(2, 1fr); gap:.55rem; margin:.8rem 0; }
+.stat { background:#fff; border:var(--line); border-radius:var(--r); padding:.4rem .7rem; box-shadow:0 .2rem 0 var(--ink); }
+.stat b { display:block; font-size:1.7rem; font-variant-numeric:tabular-nums; }
+.deb { display:grid; grid-template-columns:1fr; gap:0 1rem; }
+.dec { border:var(--line); border-radius:var(--r); padding:.6rem .9rem .7rem; margin:.7rem 0; background:#fff; box-shadow:0 .2rem 0 var(--ink); }
+.dec.good { border-left-width:.7rem; border-left-color:var(--ok); } .dec.try { border-left-width:.7rem; border-left-color:var(--rust); }
+.verdict { font-size:.85rem; font-weight:900; }
+.dec .dt b { font-size:1.15rem; }
+.rd { display:grid; grid-template-columns:2.2rem 1fr; gap:.1rem .6rem; margin:.7rem 0; }
+.rd .ic { font-size:1.6rem; line-height:1.15; }
+footer { margin:1.4rem 0 2.4rem; }
+.ds ul, .feedurls { margin:.3rem 0 0 1.1rem; padding:0; }
+.ds li { margin:.3rem 0; }
+
+/* wide screens, projectors: report on the left, cards on the right, nothing to scroll for */
+@media (min-width:900px) {
+  .play { display:grid; grid-template-columns:1fr 1.15fr; gap:0 1.3rem; align-items:start; }
+  .play .act .pick { margin-top:.5rem; }
+  .deb { grid-template-columns:1fr 1fr; align-items:start; }
+  .stats { grid-template-columns:repeat(4, 1fr); }
+  button.big { max-width:30rem; }
+  .hud { gap:.9rem; }
+  .tile { display:grid; grid-template-columns:auto 1fr auto; grid-template-areas:"ico num tag" "ico track track" "lbl lbl lbl"; column-gap:.6rem; align-items:center; }
+  .tile .row { display:contents; } .tile .ico { grid-area:ico; font-size:2.2rem; } .tile .tag { grid-area:tag; } .tile .num { grid-area:num; } .tile .track { grid-area:track; } .tile .lbl { grid-area:lbl; }
+}
+@media (max-width:420px) { .tile .num { font-size:1.9rem; } .tile .ico { font-size:1.4rem; } .kip { width:4.4rem; } }
+@media (prefers-reduced-motion:reduce) { * { animation:none !important; transition:none !important; } }
