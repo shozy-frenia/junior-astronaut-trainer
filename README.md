@@ -69,4 +69,4 @@ This project was built with AI assistance: Anthropic Claude helped write the cod
 
 ## License
 
-Code: [MIT](LICENSE) © 2026 Nabeghlavi. NASA and CSA data and linked pages belong to their owners and follow their own terms; the game links to each source.
+Code: [MIT](LICENSE) © 2026 Nabeghlavi. NASA and CSA data and linked pages belong to their owners and follow their own terms; the game links to each source. Fonts: Fredoka and Nunito, embedded in style.css under the SIL Open Font License ([fonts/OFL.txt](fonts/OFL.txt)). Icons are drawn as SVG code in index.html.

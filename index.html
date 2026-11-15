@@ -6,7 +6,7 @@
 <title>Outpost 30 - Junior Astronaut Mission Trainer</title>
 <meta name="description" content="A Mars base card game for kids 7-12. Every choice costs air, power or radiation shielding, and the space weather is real NASA DONKI data.">
 <meta name="theme-color" content="#e8f0ff">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%AA%90%3C/text%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='4' y='4' width='56' height='56' rx='16' fill='%23ff9a5c' stroke='%2317224d' stroke-width='4'/%3E%3Ccircle cx='32' cy='32' r='12' fill='%23ffd84f' stroke='%2317224d' stroke-width='4'/%3E%3Cpath d='M17 37c-6 4-7 8-4 9 5 2 18-3 27-10s14-14 11-16c-2-1-6 0-10 2' fill='none' stroke='%2317224d' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E">
 <meta property="og:title" content="Outpost 30 - Junior Astronaut Mission Trainer">
 <meta property="og:description" content="Keep a Mars base alive for 30 sols. Real NASA space weather, real trade-offs. Free, no account, works offline.">
 <meta property="og:image" content="https://shozy-frenia.github.io/junior-astronaut-trainer/media/screenshot.jpg">
@@ -136,41 +136,41 @@ function createEngine(data) {
   /* ---------- cards ([T] amounts; anchors are real, from data.js) ---------- */
   function ev(s) { return s.schedule[s.sol - 1]; }
   var CARDS = [
-    { id: 'recycler', icon: '♻️', name: 'Recycler overtime', text: 'Run the air and water cleaner extra hard.',
+    { id: 'recycler', icon: 'recycle', name: 'Recycler overtime', text: 'Run the air and water cleaner extra hard.',
       cost: { power: 10 }, gain: { ls: 10 },
       anchor: function () { var a = data.anchors.issWater.recovery; return fact(a, a.kid); } },
-    { id: 'moxie', icon: '🫁', name: 'MOXIE oxygen maker', text: 'Make oxygen out of Mars air.',
+    { id: 'moxie', icon: 'o2', name: 'MOXIE oxygen maker', text: 'Make oxygen out of Mars air.',
       cost: { power: 15 }, gain: { ls: 12 },
       anchor: function () { var a = data.anchors.moxie.oxygenTotal; return fact(a, a.kid); } },
-    { id: 'grow', icon: '🌱', name: 'Grow food', text: 'Tend the greenhouse and pick a harvest.',
+    { id: 'grow', icon: 'sprout', name: 'Grow food', text: 'Tend the greenhouse and pick a harvest.',
       cost: { power: 10, ls: 5 }, gain: {}, extraGain: '+1 harvest, and +3% Life Support next sol',
       fx: function (s) { s.harvests += 1; s.bonusNext += 3; return 'Harvest picked! The plants will make a little extra air next sol.'; },
       anchor: function () { var a = data.csaFood[3]; return fact(a.fact, a.kid); } },
-    { id: 'wall', icon: '💧', name: 'Water wall', text: 'Stack water tanks around the sleeping area. Water blocks space rays.',
+    { id: 'wall', icon: 'drop', name: 'Water wall', text: 'Stack water tanks around the sleeping area. Water blocks space rays.',
       cost: { ls: 15 }, gain: {}, extraGain: 'next particle storm hurts 80% less',
       ok: function (s) { return !s.wallArmed; },
       fx: function (s) { s.wallArmed = true; return 'Water wall is ready for the next particle storm.'; },
       anchor: function () { var a = data.anchors.shieldWater; return fact(a, a.kid); } },
-    { id: 'roof', icon: '🧱', name: 'Dirt roof', text: 'Pile Mars soil on the roof as a radiation shield.',
+    { id: 'roof', icon: 'bricks', name: 'Dirt roof', text: 'Pile Mars soil on the roof as a radiation shield.',
       cost: { power: 20 }, gain: {}, extraGain: 'daily dose drops to 0.50 mSv. Storms hurt 30% less. Lasts all mission.',
       ok: function (s) { return !s.roofBuilt; },
       fx: function (s) { s.roofBuilt = true; return 'Soil roof built. Every day from now on takes in less radiation.'; },
       anchor: function () { var a = data.anchors.shieldSoil; return fact(a, a.kid); } },
-    { id: 'shelter', icon: '🛖', name: 'Storm shelter', text: 'Hide in the safest room until the storm passes.',
+    { id: 'shelter', icon: 'shelter', name: 'Storm shelter', text: 'Hide in the safest room until the storm passes.',
       cost: { power: 8 }, extraCost: 'next sol you play only 1 card', gain: {}, extraGain: "today's storm hurts 70% less",
       ok: function (s) { return !!ev(s).storm && !s.shelterToday; },
       fx: function (s) { s.shelterToday = true; s.lostActionNext = 1; return 'The crew is in the shelter. Tomorrow you only get to play 1 card.'; },
       anchor: function () { var a = data.anchors.stormShelter; return fact(a, a.kid); } },
-    { id: 'rock', icon: '🪨', name: 'Rock-sample walk', text: 'Walk out and collect a rock sample.',
+    { id: 'rock', icon: 'rock', name: 'Rock-sample walk', text: 'Walk out and collect a rock sample.',
       cost: { ls: 5, power: 5 }, gain: {}, extraGain: '+1 science star',
       fx: function (s) { s.stars += 1; return 'Rock sample collected: +1 science star.'; },
       anchor: function () { var a = data.anchors.sampleTubes; return fact(a, a.kid); } },
-    { id: 'clean', icon: '🧹', name: 'Clean solar panels', text: 'Brush the dust off the solar panels.',
+    { id: 'clean', icon: 'brush', name: 'Clean solar panels', text: 'Brush the dust off the solar panels.',
       cost: { ls: 5 }, gain: {}, extraGain: '+10 kWh every sol until the next dust storm',
       ok: function (s) { return !s.panelsClean; },
       fx: function (s) { s.panelsClean = true; return 'Panels are shiny. More power every sol (until dust comes back).'; },
       anchor: function () { var a = data.anchors.opportunity.dustTau; return fact(a, a.kid); } },
-    { id: 'call', icon: '📡', name: 'Call Earth', text: 'Ask Mission Control what is coming. Radio messages need time to travel.',
+    { id: 'call', icon: 'dish', name: 'Call Earth', text: 'Ask Mission Control what is coming. Radio messages need time to travel.',
       cost: { power: 5 }, gain: {}, extraGain: "see the next 2 sols' events",   // [T] the radio uses power
       ok: function (s) { return s.sol < TUNING.sols; },                                                                          // never dealt on the last sol
       fx: function (s) {
@@ -184,12 +184,12 @@ function createEngine(data) {
         var a = data.earthMars.lightMinutes.min;
         return fact(a, data.glossary.lightMinutes, 'Real: NASA JPL Horizons gives the Earth-Mars distance for every day. The delay on the card comes from it.');
       } },
-    { id: 'fixit', icon: '🔧', name: 'Fix-it (3D-print a part)', text: 'Print a new part and repair something broken.',
+    { id: 'fixit', icon: 'wrench', name: 'Fix-it (3D-print a part)', text: 'Print a new part and repair something broken.',
       cost: { power: 10 }, gain: {}, extraGain: 'fixes 1 broken machine',
       ok: function (s) { return s.failures.length > 0; },
       fx: function (s) { var f = s.failures.shift(); return f === 'recycler' ? 'The recycler works again.' : 'The solar panel string works again.'; },
       anchor: function () { var a = data.anchors.printedPart; return fact(a, a.kid); } },
-    { id: 'lab', icon: '🔬', name: 'Lab experiment', text: 'Run a science experiment and learn a real space fact.',
+    { id: 'lab', icon: 'flask', name: 'Lab experiment', text: 'Run a science experiment and learn a real space fact.',
       cost: { power: 10 }, gain: {}, extraGain: '+1 science star and 1 real fact',
       fx: function (s) {
         var f = data.osdr[s.labCount % data.osdr.length];
@@ -197,7 +197,7 @@ function createEngine(data) {
         return { text: 'Science star! ' + f.kid, url: f.evidence.url, tip: f.studyId + '; ' + f.subject,
                  name: f.evidence.source, retrieved: f.evidence.retrieved, note: f.studyId + '. Subject: ' + f.subject + '.' };
       } },
-    { id: 'psave', icon: '🌙', name: 'Power-save night', text: 'Slow the machines down overnight.',
+    { id: 'psave', icon: 'moon', name: 'Power-save night', text: 'Slow the machines down overnight.',
       cost: { ls: 5 }, gain: { power: 10 }, extraCost: 'the recycler runs slowly' }
   ];
   var byId = {};
@@ -438,14 +438,14 @@ function createEngine(data) {
     var e = state.schedule[sol - 1], out = [], T = TUNING, c, text, stamp, src;
     if (e.conjunction) {
       var cj = data.anchors.solarConjunction2026.nasaMaven;
-      out.push({ kind: 'conj', icon: '📡', title: 'Mars is behind the Sun', real: true, link: cj.url,
+      out.push({ kind: 'conj', icon: 'dish', title: 'Mars is behind the Sun', real: true, link: cj.url,
         text: 'This is called solar conjunction. No radio gets through, so Call Earth is blocked (day ' + e.conjunction + ' of ' + T.conjunctionSols + ').',
         stamp: 'Really happened ' + cj.value + ' (NASA), for about two weeks. Replayed, not live.',
         source: fromCopy(cj, 'Real: NASA says no mission could reach Mars on these dates. The game blocks Call Earth for ' + T.conjunctionSols + ' sols.') });
     }
     if (e.flare) {
       var pc = Math.round((T.flareStormChance[e.flare.letter] || 0) * 100);
-      out.push({ kind: 'flare', icon: '☀️', title: 'Solar flare ' + e.flare.cls, real: true, link: e.flare.link,
+      out.push({ kind: 'flare', icon: 'sun', title: 'Solar flare ' + e.flare.cls, real: true, link: e.flare.link,
         text: 'The Sun flashed. Mars air blocks the flash, so it is a warning. Chance of a particle storm next sol: ' + pc + '%.',
         stamp: 'Really happened on ' + dateOf(e.flare.time) + '. ' + replayNote() + ' The ' + pc + '% chance is a game number.',
         source: fromFeed('NASA DONKI: solar flare ' + e.flare.cls, e.flare.link,
@@ -472,19 +472,19 @@ function createEngine(data) {
         stamp = 'The flare was real (' + dateOf(c.flare.time) + '). ' + replayNote() + ' The storm is a game roll.';
         src = fromFeed('NASA DONKI: solar flare ' + c.flare.cls, c.flare.link, 'Real: the ' + c.flare.cls + ' flare, peak ' + whenText(c.flare.time) + '. The storm after it is a game roll.');
       }
-      out.push({ kind: 'storm', icon: '🌩️', title: 'Particle storm!', real: c.real, link: c.link || (c.flare && c.flare.link) || '', hit: true,
+      out.push({ kind: 'storm', icon: 'storm', title: 'Particle storm!', real: c.real, link: c.link || (c.flare && c.flare.link) || '', hit: true,
         text: text + ' Your Shield will take a hit today.', stamp: stamp, source: src });
     }
     if (e.dust) {
       var tau = data.anchors.opportunity.dustTau;
-      out.push({ kind: 'dust', icon: '🟤', title: 'Dust storm (day ' + e.dust + ' of ' + T.dust.length + ')', real: false, link: tau.url,
+      out.push({ kind: 'dust', icon: 'dust', title: 'Dust storm (day ' + e.dust + ' of ' + T.dust.length + ')', real: false, link: tau.url,
         text: 'Dust hides the Sun, so solar power is cut in half.' + (e.dust === 1 ? ' Dust also covers the panels, so clean-panel bonuses are lost.' : ''),
         stamp: 'Game event. Real dust storms ended the rovers Opportunity and InSight. ' + tau.kid,
         source: fromCopy(tau, 'Game event. Real dust storms ended the Opportunity and InSight missions.') });
     }
     if (e.failure) {
       var rec = e.failure === 'recycler', fa = rec ? data.anchors.issWater.recovery : data.anchors.insight.powerMay2022;
-      out.push({ kind: 'failure', icon: '🔧', title: rec ? 'The recycler broke' : 'A solar panel string broke', real: false, link: fa.url,
+      out.push({ kind: 'failure', icon: 'wrench', title: rec ? 'The recycler broke' : 'A solar panel string broke', real: false, link: fa.url,
         text: rec ? 'Life Support will drain 5% faster every sol until you use Fix-it.' : 'You lose 10 kWh every sol until you use Fix-it.',
         stamp: 'Game event. Real crews repair their space station machines.',
         source: fromCopy(fa, rec ? 'Game event. The recycler is based on the real water recycler on the space station.'
@@ -639,25 +639,25 @@ function createEngine(data) {
     played.forEach(function (e) { if (e.flare && (!bestFl || briefRank(e.flare) > briefRank(bestFl.flare))) { bestFl = e; } });
     if (bestFl) {
       rep = item(bestFl.sol, 'flare');
-      real.push({ icon: '☀️', text: 'Flares showed up on ' + played.filter(function (e) { return e.flare; }).length + ' of your ' + days + ' sols. The biggest was ' + an(bestFl.flare.cls) + bestFl.flare.cls + ' flare on ' + dateOf(bestFl.flare.time) + '.', source: rep.source });
+      real.push({ icon: 'sun', text: 'Flares showed up on ' + played.filter(function (e) { return e.flare; }).length + ' of your ' + days + ' sols. The biggest was ' + an(bestFl.flare.cls) + bestFl.flare.cls + ' flare on ' + dateOf(bestFl.flare.time) + '.', source: rep.source });
     } else {
-      real.push({ icon: '☀️', text: 'No flares showed up on your days. The Sun was quiet.', source: fromFeed('NASA DONKI: space weather database', data.donki.source.url, 'Real: NASA logged no C, M or X flares on your days.') });
+      real.push({ icon: 'sun', text: 'No flares showed up on your days. The Sun was quiet.', source: fromFeed('NASA DONKI: space weather database', data.donki.source.url, 'Real: NASA logged no C, M or X flares on your days.') });
     }
     st = played.filter(function (e) { return e.storm; }); realSt = st.filter(function (e) { return e.storm.real; });
     if (st.length) {
       rep = item(st[0].sol, 'storm');
-      real.push({ icon: '🌩️', text: 'You faced ' + st.length + ' particle storm' + (st.length > 1 ? 's' : '') + '. ' +
+      real.push({ icon: 'storm', text: 'You faced ' + st.length + ' particle storm' + (st.length > 1 ? 's' : '') + '. ' +
         (realSt.length === st.length ? 'All came from real NASA events.' : realSt.length ? realSt.length + ' came from real NASA events. Game dice made the rest.' : 'None came from real NASA events. Game dice made them.'), source: rep.source });
     } else {
-      real.push({ icon: '🌩️', text: 'No particle storms hit your base this time.', source: fromFeed('NASA DONKI: space weather database', data.donki.source.url, 'Real: NASA saw no storm on your days that the game used.') });
+      real.push({ icon: 'storm', text: 'No particle storms hit your base this time.', source: fromFeed('NASA DONKI: space weather database', data.donki.source.url, 'Real: NASA saw no storm on your days that the game used.') });
     }
     d = data.mars.radiation.surfaceGcrDose; iss = data.iss.typicalDay.doseEquivalentRate;
-    real.push({ icon: '🛡️', text: 'Your crew took in ' + state.totalDose + ' mSv in ' + days + ' sols. Curiosity measured ' + d.value + ' mSv every sol on Mars.',
+    real.push({ icon: 'shield', text: 'Your crew took in ' + state.totalDose + ' mSv in ' + days + ' sols. Curiosity measured ' + d.value + ' mSv every sol on Mars.',
                 source: fromCopy(d, 'Real: Curiosity RAD at Gale crater, 2012 to 2013. Jezero has no detector.') });
-    real.push({ icon: '🛰️', text: 'Astronauts on the space station took in about ' + iss.perDay.toFixed(2) + ' mSv a day in 2012.',
+    real.push({ icon: 'satellite', text: 'Astronauts on the space station took in about ' + iss.perDay.toFixed(2) + ' mSv a day in 2012.',
                 source: fromCopy(iss, 'Real: NASA RadLab, ALTEA-Survey on the station, 15 March 2012. Saved copy.') });
     if (state.stormsHit > 0) {
-      real.push({ icon: '📚', text: 'Game storms hit harder than real ones. A big 2017 Mars storm barely changed total dose.',
+      real.push({ icon: 'book', text: 'Game storms hit harder than real ones. A big 2017 Mars storm barely changed total dose.',
                   source: fromCopy(data.mars.radiation.september2017Storm.totalDose, 'Real: Curiosity RAD, 10 to 12 September 2017, Gale crater.') });
     }
 
@@ -737,13 +737,62 @@ function createEngine(data) {
     var fresh = found.filter(function (k) { return !known[k]; }).slice(0, 3);
     shownWords = fresh;
     if (!fresh.length) { return null; }
-    var kids = [h('h2', { str: '🆕 New ' + (fresh.length > 1 ? 'words' : 'word') })];
+    var kids = [h('h2', {}, [icb('book'), ' New ' + (fresh.length > 1 ? 'words' : 'word')])];
     fresh.forEach(function (k) { kids.push(h('p', { class: 'w' }, [h('b', { str: LABEL[k] + ': ' }), h('span', { str: D.glossary[k] })])); });
     kids.push(h('button', { onclick: function () { markShown(); render(); }, str: 'Got it' }));
     return h('div', { class: 'panel words' }, kids);
   }
 
   /* ---- tiny DOM helper. text = parsed for science words, str = plain ---- */
+  /* ---- icons: one hand-drawn SVG set (24 x 24, round strokes) instead of emoji, so every device shows the same art ---- */
+  var ICONS = {
+    air: '<path d="M3 8h10a3 3 0 1 0-3-3"/><path d="M3 12h15a3 3 0 1 1-3 3"/><path d="M3 16h6"/>',
+    bolt: '<path d="M13 2 4 14h7l-1 8 9-12h-7z" fill="currentColor"/>',
+    shield: '<path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/><path d="M12 7v10"/>',
+    sprout: '<path d="M12 21v-9"/><path d="M12 12C12 8 9 6 4.5 6c0 4 3 6 7.5 6z"/><path d="M12 11c0-3 2.2-5 6.5-5 0 3-2.4 5-6.5 5z"/>',
+    wrench: '<path d="M15 3.5a5 5 0 0 0-4.6 6.9l-6.7 6.7a1.9 1.9 0 0 0 2.7 2.7l6.7-6.7A5 5 0 0 0 20.5 9l-3.2 1-2.3-2.3 1-3.2z"/>',
+    sun: '<circle cx="12" cy="12" r="4.2" fill="currentColor"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/>',
+    dish: '<path d="M3.5 9.5a9 9 0 0 0 11 11z"/><path d="M9 15l3.5-3.5"/><circle cx="13.3" cy="10.7" r="1.3" fill="currentColor"/><path d="M15 3.5a5.5 5.5 0 0 1 5.5 5.5"/><path d="M15 7a2 2 0 0 1 2 2"/>',
+    sunset: '<path d="M2 18h20"/><path d="M6 18a6 6 0 0 1 12 0"/><path d="M12 5.5v2.5M4.6 10.6l1.8 1.4M19.4 10.6 17.6 12M8 22h8"/>',
+    star: '<path d="M12 2.8l2.8 5.8 6.3.9-4.6 4.4 1.1 6.3L12 17.2 6.4 20.2l1.1-6.3L2.9 9.5l6.3-.9z" fill="currentColor"/>',
+    starOff: '<path d="M12 2.8l2.8 5.8 6.3.9-4.6 4.4 1.1 6.3L12 17.2 6.4 20.2l1.1-6.3L2.9 9.5l6.3-.9z"/>',
+    astronaut: '<circle cx="12" cy="10" r="7"/><rect x="7.5" y="7.2" width="9" height="5.6" rx="2.8" fill="currentColor"/><path d="M5 22a7 4 0 0 1 14 0"/>',
+    drop: '<path d="M12 3s-6.5 7.2-6.5 11.5a6.5 6.5 0 0 0 13 0C18.5 10.2 12 3 12 3z"/><path d="M9 15a3 3 0 0 0 3 3"/>',
+    bricks: '<rect x="3" y="5" width="18" height="14" rx="1.5"/><path d="M3 9.7h18M3 14.3h18M9 5v4.7M15 5v4.7M12 9.7v4.6M7 14.3V19M17 14.3V19"/>',
+    brush: '<path d="M14.5 9.5 20 4"/><path d="M8.5 10.5l5 5"/><path d="M8.5 10.5 3 16v4.5h4.5l6-5"/><path d="M6 17.5l1.5-1.5"/>',
+    dust: '<circle cx="6" cy="7" r="1.6" fill="currentColor"/><circle cx="17" cy="5.5" r="1.2" fill="currentColor"/><circle cx="12" cy="19" r="1.3" fill="currentColor"/><path d="M2.5 12.5c3-3 6 3 9.5 0s6.5 3 9.5 0"/>',
+    help: '<circle cx="12" cy="12" r="9.5"/><path d="M9.3 9.3a2.7 2.7 0 1 1 3.8 2.5c-.7.3-1.1 1-1.1 1.7v.6"/><circle cx="12" cy="17.2" r="1.1" fill="currentColor"/>',
+    recycle: '<path d="M20 12a8 8 0 0 1-13.6 5.7"/><path d="M4 12a8 8 0 0 1 13.6-5.7"/><path d="M18 2.5v4.2h-4.2"/><path d="M6 21.5v-4.2h4.2"/>',
+    o2: '<circle cx="9" cy="14" r="5.5"/><circle cx="17.5" cy="6.5" r="3"/><circle cx="19" cy="16" r="1.8"/>',
+    shelter: '<path d="M2.5 11.5 12 4l9.5 7.5"/><path d="M5 10v10.5h14V10"/><path d="M10 20.5V15h4v5.5"/>',
+    rock: '<path d="M3.5 18.5 6.5 9l5.5-4.5 6.5 3.5 2.5 10.5z"/><path d="M6.5 9l5.5 3.5L18.5 8M12 12.5l-1.5 6"/>',
+    flask: '<path d="M8.5 3h7M10 3v6.5L4.4 19a1.4 1.4 0 0 0 1.2 2h12.8a1.4 1.4 0 0 0 1.2-2L14 9.5V3"/><path d="M7 15.5h10"/>',
+    moon: '<path d="M20 14.5A8.2 8.2 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>',
+    satellite: '<rect x="9" y="8" width="6" height="8" rx="1"/><rect x="1.5" y="9" width="5.5" height="6"/><rect x="17" y="9" width="5.5" height="6"/><path d="M7 12h2M15 12h2M12 8V4.5"/><circle cx="12" cy="3.5" r="1" fill="currentColor"/>',
+    book: '<path d="M4 19.5V5a2 2 0 0 1 2-2h14v15H6a2 2 0 0 0-2 2 2 2 0 0 0 2 2h14"/><path d="M8.5 7.5h7"/>',
+    soundOn: '<path d="M3.5 9h4l5-4v14l-5-4h-4z"/><path d="M16 9a4 4 0 0 1 0 6M18.7 6.3a8 8 0 0 1 0 11.4"/>',
+    soundOff: '<path d="M3.5 9h4l5-4v14l-5-4h-4z"/><path d="M16.5 9.5l5 5M21.5 9.5l-5 5"/>',
+    planet: '<circle cx="12" cy="12" r="6.5"/><path d="M5.4 13.6C1.6 15.9.6 18 1.9 18.9c1.8 1.2 7.4-.9 12.6-4.5s8.7-7.9 7.6-9.6c-.9-1.2-3.5-.6-6.8 1"/>',
+    warn: '<path d="M12 3.2 2 20.5h20z"/><path d="M12 9.5v5"/><circle cx="12" cy="17.6" r="1.1" fill="currentColor"/>',
+    check: '<path d="M4.5 12.5l5 5L20 7"/>',
+    trophy: '<path d="M7.5 3.5h9V9a4.5 4.5 0 0 1-9 0z"/><path d="M7.5 5.5H4.5a3 3 0 0 0 3.3 4.4M16.5 5.5h3a3 3 0 0 1-3.3 4.4"/><path d="M12 13.5v3.5M8 21h8M9.5 17h5v4h-5z"/>',
+    rocket: '<path d="M12 2c4 3 5.2 8 4.2 13H7.8C6.8 10 8 5 12 2z"/><circle cx="12" cy="9" r="1.9"/><path d="M7.8 15 5 18v3l3.6-2M16.2 15l2.8 3v3l-3.6-2"/><path d="M10.2 18.5v.6a1.8 1.8 0 0 0 3.6 0v-.6"/>',
+    storm: '<path d="M7 16.5a4.5 4.5 0 1 1 .9-8.9 5.5 5.5 0 0 1 10.5 1.6A3.7 3.7 0 0 1 18 16.5"/><path d="M13 12.5l-3 4.8h4l-2.2 4.7" />',
+    repeat: '<path d="M4 12a8 8 0 0 1 13.7-5.6L20 8.5"/><path d="M20 3.5v5h-5"/><path d="M20 12a8 8 0 0 1-13.7 5.6L4 15.5"/><path d="M4 20.5v-5h5"/>',
+    cards: '<rect x="2.5" y="6.5" width="11" height="15" rx="2"/><path d="M9 4.2 18.4 2.6a2 2 0 0 1 2.3 1.6l2 11.4a2 2 0 0 1-1.6 2.3l-5.6 1"/>',
+    sparkle: '<path d="M12 2.5l2 6.5 6.5 2-6.5 2-2 6.5-2-6.5-6.5-2 6.5-2z" fill="currentColor"/><path d="M19 17.5v4M17 19.5h4"/>',
+    back: '<path d="M15 5l-7 7 7 7"/>',
+    out: '<path d="M14 4h6v6M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>'
+  };
+  /* colour for each icon's sticker tile */
+  var ICOL = { air: 'ls', bolt: 'pw', shield: 'sh', sprout: 'ok', wrench: 'rust', sun: 'pw', dish: 'sky', sunset: 'rust', star: 'pw', astronaut: 'sky',
+    drop: 'ls', bricks: 'rust', brush: 'sky', dust: 'dust', help: 'sky', recycle: 'ok', o2: 'ls', shelter: 'sh', rock: 'dust', flask: 'sh', moon: 'night',
+    satellite: 'sky', book: 'sky', planet: 'rust', storm: 'bad', warn: 'pw', trophy: 'pw', rocket: 'rust', repeat: 'sky', check: 'ok', sparkle: 'sh' };
+  function svgIcon(name) { return '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' + (ICONS[name] || ICONS.sparkle) + '</svg>'; }
+  function ic(name, cls) { var s = document.createElement('span'); s.className = 'i' + (cls ? ' ' + cls : ''); s.setAttribute('aria-hidden', 'true'); s.innerHTML = svgIcon(name); return s; }
+  function icb(name, cls) { return ic(name, 'ib c-' + (ICOL[name] || 'sky') + (cls ? ' ' + cls : '')); }
+  function withIc(name, text) { return [ic(name), ' ' + text]; }
+
   function h(tag, props, kids) {
     var e = document.createElement(tag);
     Object.keys(props || {}).forEach(function (k) {
@@ -754,7 +803,7 @@ function createEngine(data) {
     (kids || []).forEach(function (c) { if (c) { e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); } });
     return e;
   }
-  function link(url, label, tip) { return url ? h('a', { href: url, target: '_blank', rel: 'noopener', title: tip || '' }, [label || 'source']) : null; }
+  function link(url, label, tip) { return url ? h('a', { href: url, target: '_blank', rel: 'noopener', title: tip || '' }, [label || 'source', ' ', ic('out', 'sm')]) : null; }
   function sign(n) { return (n > 0 ? '+' : n < 0 ? '−' : '±') + Math.abs(n); }
 
   function newSeed() {
@@ -768,10 +817,10 @@ function createEngine(data) {
     var seen = false; try { seen = localStorage.getItem('o30-brief') === 'seen'; } catch (err) { seen = false; }
     if (!seen && !/[?&]nobrief\b/.test(location.search)) { briefing(null); }
   }
-  function rankBtn(level, title, sub) {
+  function rankBtn(level, icon, title, sub) {
     var wait = feed === 'checking';
     return h('button', { class: 'big rank' + (level === 'cadet' ? '' : ' quiet'), disabled: wait, onclick: function () { start(level); } },
-      [h('b', { str: title }), h('span', { class: 'sub', str: wait ? 'Contacting NASA...' : sub })]);
+      [icb(icon, 'rico'), h('b', { str: title }), h('span', { class: 'sub', str: wait ? 'Contacting NASA...' : sub })]);
   }
   function act(fn) {
     if (busy) { return; }
@@ -805,7 +854,7 @@ function createEngine(data) {
       s.note ? h('p', { text: s.note }) : null,
       extra ? h('p', { text: extra }) : null,
       h('p', { class: 'dim', str: 'Source: ' + s.name + '. ' + (s.live ? 'Fetched live from NASA on ' : 'Saved copy, retrieved ') + s.retrieved + '.' }),
-      s.url ? h('p', {}, [link(s.url, 'Open the source page ↗')]) : h('p', { class: 'dim', str: 'This one has no web page.' })
+      s.url ? h('p', {}, [link(s.url, 'Open the source page')]) : h('p', { class: 'dim', str: 'This one has no web page.' })
     ]);
     var btn = h('button', { class: 'src', 'aria-expanded': 'false', str: 'Where does this come from?' });
     btn.onclick = function () { btn.setAttribute('aria-expanded', panel.classList.toggle('open') ? 'true' : 'false'); };
@@ -917,8 +966,8 @@ function createEngine(data) {
       h('div', { class: 'dsun', 'aria-hidden': 'true' }),
       h('div', { class: 'dground', 'aria-hidden': 'true' }),
       h('div', { class: 'dcard' }, [
-        h('p', { class: 'dsol', str: '🌅 Sunset on sol ' + L.sol }),
-        h('div', { class: 'dchips' }, [h('span', { str: '💨 ' + sign(L.dLs) + '%' }), h('span', { str: '⚡ ' + sign(L.dPower) + ' kWh' }), h('span', { str: '🛡️ ' + sign(L.dShield) + ' mSv' })]),
+        h('p', { class: 'dsol' }, [ic('sunset'), ' Sunset on sol ' + L.sol]),
+        h('div', { class: 'dchips' }, [h('span', {}, withIc('air', sign(L.dLs) + '%')), h('span', {}, withIc('bolt', sign(L.dPower) + ' kWh')), h('span', {}, withIc('shield', sign(L.dShield) + ' mSv'))]),
         L.notes.length ? h('p', { class: 'dnote', text: L.notes.join('. ') + '.' }) : null,
         h('p', { class: 'dnext', str: end ? 'The mission is over. Let us see how it went…' : 'Sol ' + after.sol + ' begins…' }),
         h('p', { class: 'dskip', str: 'Tap to skip' })
@@ -950,30 +999,30 @@ function createEngine(data) {
     return h('button', { class: 'sndbtn', 'aria-pressed': sound ? 'true' : 'false', onclick: function () {
       sound = !sound; try { localStorage.setItem('o30-sound', sound ? 'on' : 'off'); } catch (err) { /* private mode */ }
       beep('play'); render();
-    }, str: sound ? '🔊 Sound on' : '🔈 Sound off' });
+    } }, withIc(sound ? 'soundOn' : 'soundOff', sound ? 'Sound on' : 'Sound off'));
   }
 
-  /* ---- mission briefing: 4 picture steps before the first mission (and from the ❓ button) ---- */
+  /* ---- mission briefing: 4 picture steps before the first mission (and from the How to play button) ---- */
   function briefing(then) {
     var prev = document.activeElement, ov, btn;
     function close() { document.removeEventListener('keydown', onKey); if (ov.parentNode) { ov.parentNode.removeChild(ov); } try { localStorage.setItem('o30-brief', 'seen'); } catch (err) { /* ok */ } if (then) { then(); } else if (prev && prev.focus) { prev.focus(); } }
     function onKey(ev) { if (ev.key === 'Escape') { close(); } }
-    function step(n, icon, title, text) { return h('li', { class: 'bstep', style: '--i:' + n }, [h('span', { class: 'bicon', 'aria-hidden': 'true', str: icon }), h('div', {}, [h('b', { str: title }), h('span', { text: text })])]); }
+    function step(n, icon, title, text) { return h('li', { class: 'bstep', style: '--i:' + n }, [h('span', { class: 'bicon', 'aria-hidden': 'true' }, icon.map(function (n) { return icb(n); })), h('div', {}, [h('b', { str: title }), h('span', { text: text })])]); }
     var k = h('span', { class: 'kip', 'aria-hidden': 'true' }); k.innerHTML = kipSvg('happy', null);
-    btn = h('button', { class: 'big', onclick: close, str: 'Let’s go! 🚀' });
+    btn = h('button', { class: 'big', onclick: close, }, ['Let’s go! ', ic('rocket')]);
     ov = h('div', { class: 'brief', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'brief-t' }, [h('div', { class: 'bcard' }, [
       h('div', { class: 'bhead' }, [k, h('div', {}, [h('h2', { id: 'brief-t', str: 'Mission briefing' }), h('p', { class: 'dim', str: 'Kip shows you how to keep the base alive.' })])]),
       h('ol', { class: 'bsteps' }, [
-        step(0, '💨⚡🛡️', 'Watch your 3 bars', 'Life Support, Power and Shield. If one hits 0, the mission ends.'),
-        step(1, '☀️', 'Read the morning report', 'Real NASA space weather. A big solar flare can bring a particle storm.'),
-        step(2, '🃏', 'Pick 2 of 3 cards', 'Every card costs something. There is no free safe choice!'),
-        step(3, '🌅', 'Press sunset', 'The base uses air, power and Shield. Then a new sol begins.')]),
+        step(0, ['air', 'bolt', 'shield'], 'Watch your 3 bars', 'Life Support, Power and Shield. If one hits 0, the mission ends.'),
+        step(1, ['sun'], 'Read the morning report', 'Real NASA space weather. A big solar flare can bring a particle storm.'),
+        step(2, ['cards'], 'Pick 2 of 3 cards', 'Every card costs something. There is no free safe choice!'),
+        step(3, ['sunset'], 'Press sunset', 'The base uses air, power and Shield. Then a new sol begins.')]),
       btn])]);
     ov.addEventListener('click', function (ev) { if (ev.target === ov) { close(); } });
     document.addEventListener('keydown', onKey);
-    document.body.appendChild(ov); btn.focus();
+    document.body.appendChild(ov); try { btn.focus({ preventScroll: true }); } catch (err) { btn.focus(); }
   }
-  function helpBtn() { return h('button', { class: 'sndbtn', 'aria-label': 'How to play', onclick: function () { briefing(null); }, str: '❓ How to play' }); }
+  function helpBtn() { return h('button', { class: 'sndbtn', 'aria-label': 'How to play', onclick: function () { briefing(null); } }, withIc('help', 'How to play')); }
 
   /* ---- confetti when a mission is complete ---- */
   function confetti() {
@@ -1050,17 +1099,17 @@ function createEngine(data) {
     var sky = h('div', { class: 'sky', 'aria-hidden': 'true' }), k = h('span', { class: 'kip', 'aria-hidden': 'true' });
     sky.innerHTML = sceneSvg(null, true); k.innerHTML = kipSvg('happy', null); sky.appendChild(k);
     return h('div', { class: 'stage intro mood-happy' }, [sky,
-      h('div', { class: 'htitle' }, [h('h1', {}, ['🪐 Outpost ', h('span', { str: '30' })]), h('p', { str: 'Junior Astronaut Mission Trainer' })]),
+      h('div', { class: 'htitle' }, [h('h1', {}, [icb('planet', 'logo'), 'Outpost ', h('span', { str: '30' })]), h('p', { str: 'Junior Astronaut Mission Trainer' })]),
       h('div', { class: 'bubble right' }, [h('b', { class: 'who', str: 'Kip, your guide' }), h('span', { str: 'Hi, I am Kip! I will help you keep the base alive.' })])]);
   }
 
   /* ---- bars: icon + number + bar + a word when it gets low ---- */
-  var TILES = [{ k: 'ls', icon: '💨', label: 'Life Support', unit: '' }, { k: 'power', icon: '⚡', label: 'Power', unit: 'kWh' }, { k: 'shield', icon: '🛡️', label: 'Shield', unit: 'mSv' }];
+  var TILES = [{ k: 'ls', icon: 'air', label: 'Life Support', unit: '' }, { k: 'power', icon: 'bolt', label: 'Power', unit: 'kWh' }, { k: 'shield', icon: 'shield', label: 'Shield', unit: 'mSv' }];
   function tile(t, lv) {
     var val = state[t.k], level = lv[t.k], max = T.max[t.k], shown = t.k === 'shield' ? (val > 0 ? Math.max(0.1, Math.round(val * 10) / 10) : 0) : Math.round(val);
     var pct = val > 0 ? Math.max(3, Math.min(100, val / max * 100)) : 0;
     return h('div', { class: 'tile lv-' + level + ' k-' + t.k, role: 'img', 'aria-label': t.label + ' ' + shown + (t.unit ? ' ' + t.unit : ' percent') + (level === 'ok' ? '' : ', ' + (level === 'low' ? 'low' : 'danger')) }, [
-      h('div', { class: 'row' }, [h('span', { class: 'ico', 'aria-hidden': 'true', str: t.icon }), level === 'ok' ? null : h('span', { class: 'tag', str: level === 'low' ? 'Low' : 'Danger!' })]),
+      h('div', { class: 'row' }, [icb(t.icon, 'ico'), level === 'ok' ? null : h('span', { class: 'tag', str: level === 'low' ? 'Low' : 'Danger!' })]),
       h('div', { class: 'num', str: shown + (t.k === 'ls' ? '%' : '') }),
       h('div', { class: 'track', 'aria-hidden': 'true' }, [h('div', { class: 'fill', style: 'width:' + pct + '%' })]),
       h('div', { class: 'lbl', text: t.label + (t.unit ? ' (' + t.unit + ')' : '') })
@@ -1072,22 +1121,22 @@ function createEngine(data) {
   }
   function goalsRow() {
     var c = [], e = state.schedule[Math.min(state.sol, T.sols) - 1];
-    if (state.failures.indexOf('recycler') >= 0) { c.push('🔧 Recycler broken'); }
-    if (state.failures.indexOf('panel') >= 0) { c.push('🔧 Solar string broken'); }
-    if (e.dust && state.phase !== 'won' && state.phase !== 'lost') { c.push('🟤 Dust storm'); }
-    if (state.roofBuilt) { c.push('🧱 Dirt roof'); }
-    if (state.wallArmed) { c.push('💧 Water wall ready'); }
-    if (state.panelsClean) { c.push('🧹 Panels clean'); }
-    if (state.forbushLeft > 0) { c.push('Fewer space rays for ' + state.forbushLeft + ' sol' + (state.forbushLeft > 1 ? 's' : '')); }
+    if (state.failures.indexOf('recycler') >= 0) { c.push(['wrench', 'Recycler broken']); }
+    if (state.failures.indexOf('panel') >= 0) { c.push(['wrench', 'Solar string broken']); }
+    if (e.dust && state.phase !== 'won' && state.phase !== 'lost') { c.push(['dust', 'Dust storm']); }
+    if (state.roofBuilt) { c.push(['bricks', 'Dirt roof']); }
+    if (state.wallArmed) { c.push(['drop', 'Water wall ready']); }
+    if (state.panelsClean) { c.push(['brush', 'Panels clean']); }
+    if (state.forbushLeft > 0) { c.push(['shield', 'Fewer space rays for ' + state.forbushLeft + ' sol' + (state.forbushLeft > 1 ? 's' : '')]); }
     return h('div', {}, [
-      h('div', { class: 'goals' }, [h('span', { class: 'goal', str: '⭐ Stars ' + state.stars + '/' + T.goals.stars }), h('span', { class: 'goal', str: '🌱 Harvests ' + state.harvests + '/' + T.goals.harvests })]),
-      c.length ? h('div', { class: 'chips' }, c.map(function (t) { return h('span', { class: 'chip', text: t }); })) : null
+      h('div', { class: 'goals' }, [h('span', { class: 'goal' }, [icb('star'), ' Stars ' + state.stars + '/' + T.goals.stars]), h('span', { class: 'goal' }, [icb('sprout'), ' Harvests ' + state.harvests + '/' + T.goals.harvests])]),
+      c.length ? h('div', { class: 'chips' }, c.map(function (t) { return h('span', { class: 'chip' }, [ic(t[0]), h('span', { text: ' ' + t[1] })]); })) : null
     ]);
   }
 
   /* ---- morning report ---- */
   function evItem(it, future) {
-    var kids = [h('span', { class: 'ic', 'aria-hidden': 'true', str: it.icon }), h('div', {}, [
+    var kids = [icb(it.icon, 'ic'), h('div', {}, [
       h('div', { class: 'ttl' }, [h('span', { text: it.title }), h('span', { class: 'pill ' + (it.real ? 'real' : 'game'), str: !it.real ? 'Game event' : it.source && it.source.live ? 'Real NASA data · live' : 'Real NASA data · saved' })]),
       h('div', { text: it.text }),
       it.hit && !future ? h('div', { class: 'hit', str: 'Right now this storm would cost your Shield ' + E.projectedStormHit(state) + ' mSv.' }) : null,
@@ -1099,14 +1148,14 @@ function createEngine(data) {
     if (state.lastSunset && state.sol > 1) {
       var L = state.lastSunset;
       kids.push(h('div', { class: 'lastsun' }, [h('span', { class: 'dim', str: 'Last sunset:' }),
-        h('span', { class: 'd', str: '💨 ' + sign(L.dLs) + '%' }), h('span', { class: 'd', str: '⚡ ' + sign(L.dPower) + ' kWh' }), h('span', { class: 'd', str: '🛡️ ' + sign(L.dShield) + ' mSv' })]));
+        h('span', { class: 'd' }, withIc('air', sign(L.dLs) + '%')), h('span', { class: 'd' }, withIc('bolt', sign(L.dPower) + ' kWh')), h('span', { class: 'd' }, withIc('shield', sign(L.dShield) + ' mSv'))]));
       if (L.notes.length) { kids.push(h('p', { class: 'dim', text: L.notes.join('. ') + '.' })); }
     }
     if (!items.length) { kids.push(h('p', { str: 'A quiet morning. Nothing special in the sky today.' })); }
     items.forEach(function (it, n) { var el = evItem(it); el.style.setProperty('--i', n); kids.push(el); });
     var fc = E.forecast(state);
     if (fc.length) {
-      kids.push(h('h2', { str: '📡 Message from Earth' }));
+      kids.push(h('h2', {}, [icb('dish'), ' Message from Earth']));
       fc.forEach(function (f) {
         kids.push(h('p', { text: 'Sol ' + f.sol + ' (real date ' + f.date + '):' }));
         if (!f.items.length) { kids.push(h('p', { class: 'dim', str: 'Quiet day.' })); }
@@ -1119,13 +1168,13 @@ function createEngine(data) {
   /* ---- cards ---- */
   function cardEl(v) {
     var kids = [
-      h('div', { class: 'head' }, [h('span', { class: 'cico', 'aria-hidden': 'true', str: v.icon }), h('div', { class: 'name', str: v.name })]),
+      h('div', { class: 'head' }, [icb(v.icon, 'cico'), h('div', { class: 'name', str: v.name })]),
       h('div', { text: v.text }),
       h('div', { class: 'ln cost' }, [h('b', { str: 'Costs: ' }), h('span', { text: v.costText })]),
       v.gainText ? h('div', { class: 'ln gain' }, [h('b', { str: 'Gives: ' }), h('span', { text: v.gainText })]) : null,
       v.anchor ? h('div', { class: 'anchor' }, [h('span', { text: v.anchor.text }), whence(v.anchor.source)]) : null,
-      v.reason ? h('div', { class: 'why', str: '⚠ ' + v.reason }) : null,
-      h('button', { disabled: v.played || !v.canPlay, onclick: function () { act(function (s) { return E.playCard(s, v.id); }); }, str: v.played ? 'Played ✓' : 'Play this card' })
+      v.reason ? h('div', { class: 'why' }, withIc('warn', v.reason)) : null,
+      h('button', { disabled: v.played || !v.canPlay, onclick: function () { act(function (s) { return E.playCard(s, v.id); }); }, }, v.played ? ['Played ', ic('check')] : ['Play this card'])
     ];
     return h('div', { class: 'card' + (v.played ? ' played' : '') + (fxNow && fxNow.played === v.id ? ' justplayed' : '') }, kids);
   }
@@ -1157,7 +1206,7 @@ function createEngine(data) {
     for (i = 0; i < n; i++) { if (Hs[i].dust) { out += '<rect x="' + X(i) + '" y="' + Tp + '" width="' + (X(i + 1) - X(i)) + '" height="' + ph + '" fill="#eadcc8"/>'; } }
     [0, 50, 100].forEach(function (g) { out += '<line x1="' + L + '" x2="' + (L + pw) + '" y1="' + Y(g) + '" y2="' + Y(g) + '" stroke="#c6d3ee" stroke-width="2"/><text x="' + (L - 10) + '" y="' + (Y(g) + 7) + '" text-anchor="end" font-size="' + fs + '">' + g + '%</text>'; });
     for (i = 0; i <= n; i += nw ? 10 : 5) { out += '<text x="' + X(i) + '" y="' + (Ht - 14) + '" text-anchor="middle" font-size="' + fs + '">' + (i === 0 ? 'Start' : 'Sol ' + i) + '</text>'; }
-    for (i = 0; i < n; i++) { if (Hs[i].storm) { out += '<line x1="' + X(i + 1) + '" x2="' + X(i + 1) + '" y1="' + Tp + '" y2="' + (Tp + ph) + '" stroke="#e0262d" stroke-width="2" stroke-dasharray="6 6"/><text x="' + X(i + 1) + '" y="' + (Tp - 12) + '" text-anchor="middle" font-size="26">🌩️</text>'; } }
+    for (i = 0; i < n; i++) { if (Hs[i].storm) { out += '<line x1="' + X(i + 1) + '" x2="' + X(i + 1) + '" y1="' + Tp + '" y2="' + (Tp + ph) + '" stroke="#e0262d" stroke-width="2" stroke-dasharray="6 6"/><text x="' + X(i + 1) + '" y="' + (Tp - 12) + '" text-anchor="middle" font-size="26"></text><g transform="translate(' + (X(i + 1) - 14) + ' ' + (Tp - 40) + ') scale(1.17)" fill="none" stroke="#e0262d" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">' + ICONS.storm + '</g>'; } }
     keys.forEach(function (k) {
       var pts = [X(0) + ',' + Y(pct(T.start[k], k))];
       for (i = 0; i < n; i++) { pts.push(X(i + 1) + ',' + Y(pct(Hs[i][k], k))); }
@@ -1167,13 +1216,14 @@ function createEngine(data) {
     ends.sort(function (a, b) { return a.y - b.y; });
     for (i = 1; i < ends.length; i++) { if (ends[i].y - ends[i - 1].y < 30) { ends[i].y = ends[i - 1].y + 30; } }
     ends.forEach(function (e) {
-      var v = state[e.k], lab = e.k === 'ls' ? '💨 ' + Math.round(v) + '%' : e.k === 'power' ? '⚡ ' + Math.round(v) + ' kWh' : '🛡️ ' + (Math.round(v * 10) / 10) + ' mSv';
-      out += '<text x="' + (L + pw + 14) + '" y="' + (e.y + 8) + '" font-size="' + (nw ? 28 : 24) + '" font-weight="800" fill="' + LINE[e.k] + '">' + lab + '</text>';
+      var v = state[e.k], lab = e.k === 'ls' ? Math.round(v) + '%' : e.k === 'power' ? Math.round(v) + ' kWh' : (Math.round(v * 10) / 10) + ' mSv', isz = nw ? 30 : 26;
+      out += '<g transform="translate(' + (L + pw + 10) + ' ' + (e.y - isz / 2) + ') scale(' + isz / 24 + ')" fill="none" stroke="' + LINE[e.k] + '" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="color:' + LINE[e.k] + '">' + ICONS[e.k === 'ls' ? 'air' : e.k === 'power' ? 'bolt' : 'shield'] + '</g>';
+      out += '<text x="' + (L + pw + 16 + isz) + '" y="' + (e.y + 8) + '" font-size="' + (nw ? 28 : 24) + '" font-weight="800" fill="' + LINE[e.k] + '">' + lab + '</text>';
     });
     var box = h('div', { role: 'img', 'aria-label': 'Line chart of your three bars over ' + n + ' sols. At the end: Life Support ' + Math.round(state.ls) + '%, Power ' + Math.round(state.power) + ' kWh, Shield ' + (Math.round(state.shield * 10) / 10) + ' mSv. Particle storms: ' + state.stormsHit + '.' });
     box.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + Ht + '" xmlns="http://www.w3.org/2000/svg" focusable="false" style="font-family:inherit" fill="#17224d">' + out + '</svg>';
     return h('div', { class: 'panel chart' }, [h('h2', { str: 'Your mission, sol by sol' }), box,
-      h('p', { class: 'dim', str: 'Each line shows a bar as a share of full. 🌩️ = particle storm. Brown band = dust storm. Pink band = danger zone.' })]);
+      h('p', { class: 'dim' }, ['Each line shows a bar as a share of full. ', ic('storm'), ' red dashes = particle storm. Brown band = dust storm. Pink band = danger zone.'])]);
   }
 
   /* ---- screens ---- */
@@ -1191,14 +1241,14 @@ function createEngine(data) {
       h('div', { class: 'panel' }, [
         h('h2', { str: 'How to win' }),
         h('p', { text: 'Reach sol 30 with all bars above 0.' }),
-        h('p', { str: 'Also collect ⭐ 3 science stars and 🌱 5 harvests.' }),
+        h('p', {}, ['Also collect ', icb('star', 'sm'), ' 3 science stars and ', icb('sprout', 'sm'), ' 5 harvests.']),
         h('p', { text: 'Shield is how much radiation dose your crew can still take. It is counted in mSv.' }),
         h('p', { text: DATA.meta.mode === 'live' ? 'The space weather is real. This game replays the last 30 days of NASA data.' : 'The space weather is real. Every game replays 30 days of NASA data.' }),
         h('p', {}, [badge()])
       ]),
       h('div', { class: 'panel' }, [h('div', { class: 'rankhead' }, [h('h2', { str: 'Pick your rank' }), soundBtn()]), h('div', { class: 'ranks' }, [
-        rankBtn('cadet', '🧑‍🚀 Cadet', 'Start here. Air lasts longer.'),
-        rankBtn('commander', '🚀 Commander', 'The full challenge. Air runs out faster.')])]),
+        rankBtn('cadet', 'astronaut', 'Cadet', 'Start here. Air lasts longer.'),
+        rankBtn('commander', 'rocket', 'Commander', 'The full challenge. Air runs out faster.')])]),
       footer()
     ]);
   }
@@ -1212,12 +1262,12 @@ function createEngine(data) {
       act2.push(h('h2', { class: 'pick', str: state.phase === 'plan' ? 'Pick ' + left + ' card' + (left > 1 ? 's' : '') + '. No skipping!' : 'Cards played. Ready for sunset!' }));
       act2.push(h('div', { class: 'cards' + (fxNow && fxNow.dealt ? ' deal' : '') }, E.cardViews(state).map(function (v, n) { var c = cardEl(v); c.style.setProperty('--i', n); return c; })));
       act2.push(logPanel());
-      if (state.phase === 'sunsetReady') { act2.push(h('button', { class: 'big', onclick: function () { act(E.endSol); }, str: '🌅 Sunset: end the sol' })); }
+      if (state.phase === 'sunsetReady') { act2.push(h('button', { class: 'big', onclick: function () { act(E.endSol); }, }, [ic('sunset'), ' Sunset: end the sol'])); }
     }
     return h('div', {}, [
       h('div', { class: 'top' }, [
         h('div', { class: 'sol', text: 'Sol ' + state.sol + ' of ' + T.sols }),
-        h('span', { class: 'rankchip', str: state.level === 'cadet' ? '🧑‍🚀 Cadet' : '🚀 Commander' }),
+        h('span', { class: 'rankchip' }, state.level === 'cadet' ? withIc('astronaut', 'Cadet') : withIc('rocket', 'Commander')),
         h('span', { class: 'tools' }, [helpBtn(), soundBtn()]),
         h('div', { class: 'dim', str: 'Real NASA day ' + e.date + (DATA.meta.mode === 'live' ? ' (last 30 days)' : ' (archive, not live)') })
       ]),
@@ -1233,34 +1283,34 @@ function createEngine(data) {
     return debriefData;
   }
   function endScreen() {
-    var won = state.result.outcome === 'won', stars = '', g = E.hint(state), d = debriefOnce(), i;
-    for (i = 0; i < 3; i++) { stars += i < state.result.rating ? '★' : '☆'; }
+    var won = state.result.outcome === 'won', stars = [], g = E.hint(state), d = debriefOnce(), i;
+    stars = [0, 1, 2].map(function (n) { return ic(n < state.result.rating ? 'star' : 'starOff', 'st' + (n < state.result.rating ? ' on' : '')); });
     var left = [], right = [];
     if (d) {
       left.push(h('h2', { str: '3 choices that mattered most' }));
       if (!d.decisions.length) { left.push(h('p', { str: 'This mission was too short to compare choices.' })); }
       d.decisions.forEach(function (x) {
         left.push(h('div', { class: 'dec ' + x.tone }, [
-          h('div', { class: 'verdict', str: x.tone === 'good' ? '✅ This choice helped' : '🔁 Try the other card' }),
-          h('div', { class: 'dt' }, [h('b', { str: 'Sol ' + x.sol + ': ' + x.icon + ' ' + x.name }), h('div', { class: 'dim', str: 'instead of ' + x.otherIcon + ' ' + x.otherName })]),
+          h('div', { class: 'verdict' }, x.tone === 'good' ? withIc('check', 'This choice helped') : withIc('repeat', 'Try the other card')),
+          h('div', { class: 'dt' }, [h('b', {}, ['Sol ' + x.sol + ': ', icb(x.icon, 'sm'), ' ' + x.name]), h('div', { class: 'dim' }, ['instead of ', ic(x.otherIcon), ' ' + x.otherName])]),
           h('p', { text: x.text })]));
       });
-      left.push(h('div', { class: 'panel' }, [h('h2', { str: '🧑‍🚀 A real astronaut fact' }), h('p', { text: d.fact.text }),
+      left.push(h('div', { class: 'panel' }, [h('h2', {}, [icb('astronaut'), ' A real astronaut fact']), h('p', { text: d.fact.text }),
         h('p', { class: 'dim', str: 'From NASA OSDR study ' + d.fact.studyId + '. Who: ' + d.fact.subject + '.' }), whence(d.fact.source)]));
       right.push(h('h2', { str: 'What the real NASA data showed' }));
-      d.real.forEach(function (r) { right.push(h('div', { class: 'rd' }, [h('span', { class: 'ic', 'aria-hidden': 'true', str: r.icon }), h('div', {}, [h('div', { text: r.text }), whence(r.source)])])); });
+      d.real.forEach(function (r) { right.push(h('div', { class: 'rd' }, [icb(r.icon, 'ic'), h('div', {}, [h('div', { text: r.text }), whence(r.source)])])); });
       right.push(h('p', { class: 'dim', text: DATA.meta.mode === 'live' ? 'Space weather: fetched live, replayed as game days.' : 'Space weather: archived copy. Replayed, not live.' }));
       right.push(guide(won ? 'happy' : 'calm', d.tip));
     }
     return h('div', { class: 'end ' + (won ? 'win' : 'lose') }, [
-      h('div', { class: 'hero' }, [h('div', { class: 'ttl' }, [h('h1', { str: won ? '🎉 Mission complete!' : '🚀 Mission ended' }), won ? h('p', { class: 'stars', 'aria-label': state.result.rating + ' of 3 stars', str: stars }) : null]), guide(g.mood, g.text, true)]),
+      h('div', { class: 'hero' }, [h('div', { class: 'ttl' }, [h('h1', {}, won ? [icb('trophy', 'logo'), 'Mission complete!'] : [icb('rocket', 'logo'), 'Mission ended']), won ? h('p', { class: 'stars', role: 'img', 'aria-label': state.result.rating + ' of 3 stars' }, stars) : null]), guide(g.mood, g.text, true)]),
       wordsHolder,
       h('div', { class: 'panel' }, [h('p', { text: E.resultText(state) }),
         won && state.result.rating < 3 ? h('p', { class: 'dim', str: 'Keep at least ' + T.goals.shieldFor3Stars + ' mSv of Shield for 3 stars.' }) : null]),
       h('div', { class: 'stats' }, [
         h('div', { class: 'stat' }, [h('b', { str: String(state.history.length) }), h('span', { text: 'sols you lasted' })]),
-        h('div', { class: 'stat' }, [h('b', { str: state.stars + ' ⭐' }), h('span', { str: 'science stars' })]),
-        h('div', { class: 'stat' }, [h('b', { str: state.harvests + ' 🌱' }), h('span', { str: 'harvests' })]),
+        h('div', { class: 'stat' }, [h('b', {}, [state.stars + ' ', icb('star', 'sm')]), h('span', { str: 'science stars' })]),
+        h('div', { class: 'stat' }, [h('b', {}, [state.harvests + ' ', icb('sprout', 'sm')]), h('span', { str: 'harvests' })]),
         h('div', { class: 'stat' }, [h('b', { str: state.totalDose + ' mSv' }), h('span', { text: 'radiation dose' })])
       ]),
       missionChart(),
@@ -1286,7 +1336,7 @@ function createEngine(data) {
     }
     var kids = [
       h('h1', { str: 'Data sources' }),
-      h('button', { class: 'quiet', onclick: function () { screen = backTo; render(); window.scrollTo(0, 0); }, str: '← Back' }),
+      h('button', { class: 'quiet', onclick: function () { screen = backTo; render(); window.scrollTo(0, 0); }, }, withIc('back', 'Back')),
       h('div', { class: 'panel' }, [h('h2', { str: 'Space weather right now' }), h('p', {}, [badge()])].concat(feedKids)),
       h('p', { class: 'dim', str: 'Everything below is a saved copy from ' + D.meta.retrieved + '. Only the space weather above can be LIVE.' }),
       h('p', { class: 'dim', str: 'Costs, power numbers and chances are game numbers.' })
