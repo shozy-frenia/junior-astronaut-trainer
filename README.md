@@ -17,7 +17,7 @@ Outpost 30 is a browser card game for kids aged 7–12, built for the NASA Space
 5. **Press sunset.** The base uses air, power and Shield, then the next sol starts.
 6. **Win:** reach sol 30 with all three bars above 0, plus ⭐ 3 science stars and 🌱 5 harvests. Keep at least 4 mSv of Shield for 3 stars.
 
-The base is alive: an animated scene shows today's storms, flares, dust and breakdowns, and everything you built. A short sunset between sols shows what the base used overnight. After the mission, the debrief shows a sol-by-sol chart of your three bars, replays your game to find the 3 choices that mattered most, and compares your radiation dose with real Mars and space station measurements.
+New players get a 4-step mission briefing (❓ How to play brings it back). Sound effects are off until you turn them on. The base is alive: an animated scene shows today's storms, flares, dust and breakdowns, and everything you built. A short sunset between sols shows what the base used overnight. After the mission, the debrief shows a sol-by-sol chart of your three bars, replays your game to find the 3 choices that mattered most, and compares your radiation dose with real Mars and space station measurements.
 
 Tips: tap any dotted word (sol, mSv, CME...) for a one-sentence explanation. Kip, your guide, gives hints. For a class, add `?seed=123&level=cadet` to the URL so everyone plays the same mission.
 
@@ -58,6 +58,10 @@ All saved data was retrieved on **2026-11-14** and is an archive, not live. Only
 | [Mars Ice Home](https://www.nasa.gov/centers-and-facilities/langley/nasalangley100-sojourning-to-mars/), [regolith shielding](https://ntrs.nasa.gov/citations/19900062325), [Orion storm shelter](https://science.nasa.gov/science-research/heliophysics/how-nasa-will-protect-astronauts-from-space-radiation-at-the-moon/), [Perseverance sample tubes](https://science.nasa.gov/photojournal/the-33-sample-tubes-collected-by-perseverance/), [ISS 3D printer](https://www.nasa.gov/missions/station/open-for-business-3-d-printer-creates-first-object-in-space-on-international-space-station) | Water wall, Dirt roof, Storm shelter, Rock-sample walk and Fix-it cards |
 
 The in-game **Data sources** screen (footer link) lists every dataset and link.
+
+## AI disclosure
+
+This project was built with AI assistance: Anthropic Claude helped write the code (game engine, interface, animations, test tools), drew the Kip robot and the Mars base scene as code (SVG), and drafted text, the README, the slides and the demo video's subtitles. The demo video is a real screen recording of the game, edited with code, and carries an "AI-assisted" mark. No NASA logos, flags or mission identifiers are used or changed. Every real number in `data.js` was taken from the cited NASA or CSA page and keeps its source URL and retrieval date; game numbers are marked as game numbers.
 
 ## Team
 

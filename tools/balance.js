@@ -178,7 +178,8 @@ if (!QUIET) {
 const sm = results.find(r => r.name === 'smart'), rd = results.find(r => r.name === 'random');
 const single = results.filter(r => /^always/.test(r.name));
 const dead = E.CARDS.map(c => c.id).filter(id => !(sm.picked[id] > 0 && rd.picked[id] > 0));
-console.log('\nGOALS: single-action <=70%:', single.every(r => r.winRate <= 0.7) ? 'PASS' : 'FAIL',
-  '| random 20-40%:', rd.winRate >= 0.2 && rd.winRate <= 0.4 ? 'PASS' : 'FAIL',
-  '| smart 60-80%:', sm.winRate >= 0.6 && sm.winRate <= 0.8 ? 'PASS' : 'FAIL',
+// targets per rank: Cadet is for first missions (random play should win sometimes); Commander rewards planning
+console.log('\nGOALS (' + LEVEL + '): single-action <=70%:', single.every(r => r.winRate <= 0.7) ? 'PASS' : 'FAIL',
+  LEVEL === 'cadet' ? '| random 20-40%:' : '| smart 60-80%:',
+  LEVEL === 'cadet' ? (rd.winRate >= 0.2 && rd.winRate <= 0.4 ? 'PASS' : 'FAIL') : (sm.winRate >= 0.6 && sm.winRate <= 0.8 ? 'PASS' : 'FAIL'),
   '| every card picked:', dead.length ? 'FAIL ' + dead.join(',') : 'PASS');

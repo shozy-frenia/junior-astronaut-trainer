@@ -1,5 +1,7 @@
 /* =====================================================================
    Outpost 30 - data.js
+   Built with AI assistance (Anthropic Claude); every real value below was fetched from
+   the cited NASA/CSA page and carries its source URL and retrieval date.
    Real NASA / CSA data, embedded so the game works offline (no network).
 
    ARCHIVE, NOT LIVE. Every value below was retrieved on 2026-11-14 and is

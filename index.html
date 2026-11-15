@@ -4,6 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Outpost 30 - Junior Astronaut Mission Trainer</title>
+<meta name="description" content="A Mars base card game for kids 7-12. Every choice costs air, power or radiation shielding, and the space weather is real NASA DONKI data.">
+<meta name="theme-color" content="#e8f0ff">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%AA%90%3C/text%3E%3C/svg%3E">
+<meta property="og:title" content="Outpost 30 - Junior Astronaut Mission Trainer">
+<meta property="og:description" content="Keep a Mars base alive for 30 sols. Real NASA space weather, real trade-offs. Free, no account, works offline.">
+<meta property="og:image" content="https://shozy-frenia.github.io/junior-astronaut-trainer/media/screenshot.jpg">
+<meta property="og:url" content="https://shozy-frenia.github.io/junior-astronaut-trainer/">
+<!-- Built for the NASA Space Apps Challenge 2026 by team Nabeghlavi, with AI assistance (Anthropic Claude) for code, the Kip and base-scene drawings, and text drafts.
+     All NASA and CSA data is real; every value in data.js carries its source URL and retrieval date. -->
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -703,6 +712,7 @@ function createEngine(data) {
     glossBox.classList.add('show');
   }
   glossBox.onclick = function () { glossBox.classList.remove('show'); };
+  document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') { glossBox.classList.remove('show'); } });
 
   function txt(el, text) {
     var seen = {}, last = 0, m, key, sp;
@@ -752,7 +762,12 @@ function createEngine(data) {
     return m ? Number(m[1]) : Math.floor(Math.random() * 4294967296);
   }
   var rank = (/[?&]level=(cadet|commander)\b/.exec(location.search) || [])[1] || 'cadet';   // Cadet unless chosen
-  function start(level) { markShown(); if (typeof level === 'string') { rank = level; } state = E.newGame(newSeed(), { level: rank }); fx = { from: {}, d: {}, newSol: true }; screen = 'game'; render(); window.scrollTo(0, 0); }
+  function start(level) {
+    markShown(); if (typeof level === 'string') { rank = level; }
+    state = E.newGame(newSeed(), { level: rank }); fx = { from: {}, d: {}, newSol: true }; screen = 'game'; render(); window.scrollTo(0, 0);
+    var seen = false; try { seen = localStorage.getItem('o30-brief') === 'seen'; } catch (err) { seen = false; }
+    if (!seen && !/[?&]nobrief\b/.test(location.search)) { briefing(null); }
+  }
   function rankBtn(level, title, sub) {
     var wait = feed === 'checking';
     return h('button', { class: 'big rank' + (level === 'cadet' ? '' : ' quiet'), disabled: wait, onclick: function () { start(level); } },
@@ -767,7 +782,11 @@ function createEngine(data) {
       if (state.phase === 'won' || state.phase === 'lost') { screen = 'end'; }
       render(); if (screen === 'end' || state.phase === 'morning') { window.scrollTo(0, 0); }
     }
-    if (fn === E.endSol) { busy = true; sunset(after, go); } else { go(); }
+    if (fn === E.startPlan) { beep('deal'); } else if (fn !== E.endSol) { beep('play'); }
+    if (fn === E.endSol) {
+      busy = true; beep(after.phase === 'won' ? 'win' : after.phase === 'lost' ? 'lose' : 'sunset');
+      sunset(after, function () { go(); if (after.phase === 'won') { confetti(); } else if (after.phase === 'morning' && after.schedule[after.sol - 1].storm) { setTimeout(function () { beep('storm'); }, 350); } });
+    } else { go(); }
   }
 
   /* ---- where the space weather came from ---- */
@@ -909,8 +928,69 @@ function createEngine(data) {
     timer = setTimeout(finish, 2100);
   }
 
+  /* ---- sound: tiny synth blips, off until the player turns them on ---- */
+  var sound = false, actx = null;
+  try { sound = localStorage.getItem('o30-sound') === 'on'; } catch (err) { sound = false; }
+  function beep(kind) {
+    if (!sound) { return; }
+    try {
+      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+      var tunes = { play: [[660, 0.07], [880, 0.1]], deal: [[520, 0.05], [620, 0.05]], storm: [[200, 0.22], [140, 0.3]], sunset: [[523, 0.12], [440, 0.12], [349, 0.22]],
+                    win: [[523, 0.12], [659, 0.12], [784, 0.12], [1047, 0.32]], lose: [[392, 0.16], [330, 0.16], [262, 0.3]] }, t = actx.currentTime;
+      (tunes[kind] || []).forEach(function (n) {
+        var o = actx.createOscillator(), g = actx.createGain();
+        o.type = kind === 'storm' ? 'sawtooth' : 'triangle'; o.frequency.value = n[0];
+        g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(kind === 'storm' ? 0.06 : 0.1, t + 0.012); g.gain.exponentialRampToValueAtTime(0.0001, t + n[1]);
+        o.connect(g); g.connect(actx.destination); o.start(t); o.stop(t + n[1] + 0.03); t += n[1] * 0.92;
+      });
+    } catch (err) { /* no audio: the game works the same */ }
+  }
+  function soundBtn() {
+    return h('button', { class: 'sndbtn', 'aria-pressed': sound ? 'true' : 'false', onclick: function () {
+      sound = !sound; try { localStorage.setItem('o30-sound', sound ? 'on' : 'off'); } catch (err) { /* private mode */ }
+      beep('play'); render();
+    }, str: sound ? '🔊 Sound on' : '🔈 Sound off' });
+  }
+
+  /* ---- mission briefing: 4 picture steps before the first mission (and from the ❓ button) ---- */
+  function briefing(then) {
+    var prev = document.activeElement, ov, btn;
+    function close() { document.removeEventListener('keydown', onKey); if (ov.parentNode) { ov.parentNode.removeChild(ov); } try { localStorage.setItem('o30-brief', 'seen'); } catch (err) { /* ok */ } if (then) { then(); } else if (prev && prev.focus) { prev.focus(); } }
+    function onKey(ev) { if (ev.key === 'Escape') { close(); } }
+    function step(n, icon, title, text) { return h('li', { class: 'bstep', style: '--i:' + n }, [h('span', { class: 'bicon', 'aria-hidden': 'true', str: icon }), h('div', {}, [h('b', { str: title }), h('span', { text: text })])]); }
+    var k = h('span', { class: 'kip', 'aria-hidden': 'true' }); k.innerHTML = kipSvg('happy', null);
+    btn = h('button', { class: 'big', onclick: close, str: 'Let’s go! 🚀' });
+    ov = h('div', { class: 'brief', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'brief-t' }, [h('div', { class: 'bcard' }, [
+      h('div', { class: 'bhead' }, [k, h('div', {}, [h('h2', { id: 'brief-t', str: 'Mission briefing' }), h('p', { class: 'dim', str: 'Kip shows you how to keep the base alive.' })])]),
+      h('ol', { class: 'bsteps' }, [
+        step(0, '💨⚡🛡️', 'Watch your 3 bars', 'Life Support, Power and Shield. If one hits 0, the mission ends.'),
+        step(1, '☀️', 'Read the morning report', 'Real NASA space weather. A big solar flare can bring a particle storm.'),
+        step(2, '🃏', 'Pick 2 of 3 cards', 'Every card costs something. There is no free safe choice!'),
+        step(3, '🌅', 'Press sunset', 'The base uses air, power and Shield. Then a new sol begins.')]),
+      btn])]);
+    ov.addEventListener('click', function (ev) { if (ev.target === ov) { close(); } });
+    document.addEventListener('keydown', onKey);
+    document.body.appendChild(ov); btn.focus();
+  }
+  function helpBtn() { return h('button', { class: 'sndbtn', 'aria-label': 'How to play', onclick: function () { briefing(null); }, str: '❓ How to play' }); }
+
+  /* ---- confetti when a mission is complete ---- */
+  function confetti() {
+    if (reduced()) { return; }
+    var box = h('div', { class: 'confetti', 'aria-hidden': 'true' }), cols = ['#ff7a3d', '#1d9bf0', '#7447ff', '#ffc623', '#22a35a', '#ff5fa2'], i;
+    for (i = 0; i < 70; i++) {
+      var c = document.createElement('i');
+      c.style.cssText = 'left:' + (Math.random() * 100) + '%;background:' + cols[i % cols.length] + ';animation-delay:' + (Math.random() * 0.6).toFixed(2) + 's;animation-duration:' + (2 + Math.random() * 1.6).toFixed(2) + 's;--r:' + Math.round(Math.random() * 720 - 360) + 'deg;--x:' + Math.round(Math.random() * 160 - 80) + 'px';
+      box.appendChild(c);
+    }
+    document.body.appendChild(box);
+    setTimeout(function () { if (box.parentNode) { box.parentNode.removeChild(box); } }, 4500);
+  }
+
   /* ---- the base scene: an svg of Jezero that shows today's events and what you built ---- */
+  function narrowView() { return (app.clientWidth || window.innerWidth) < 700; }
   function sceneSvg(s, hero) {
+    var nw = narrowView(), VW = nw ? 460 : 1000;
     var e = s ? s.schedule[Math.min(s.sol, T.sols) - 1] : null, live = s && s.phase !== 'won' && s.phase !== 'lost';
     var storm = live && !!e.storm, dust = live && e.dust > 0, flare = live && !!e.flare, conj = live && !!e.conjunction;
     var fails = s ? s.failures : [], o = [], i, x, sky, far, near, seed = 7;
@@ -923,12 +1003,14 @@ function createEngine(data) {
       '<clipPath id="pclip"><polygon points="596,150 650,150 662,122 608,122"/><polygon points="664,150 718,150 730,122 676,122"/><polygon points="732,150 786,150 798,122 744,122"/></clipPath></defs>');
     o.push('<rect width="1000" height="200" fill="url(#skyg)"/>');
     if (hero) { for (i = 0; i < 34; i++) { o.push('<circle class="tw" cx="' + Math.round(rnd() * 1000) + '" cy="' + Math.round(rnd() * 95) + '" r="' + (1 + Math.round(rnd() * 2)) + '" fill="#fff" style="animation-delay:-' + (rnd() * 3).toFixed(2) + 's"/>'); } }
-    var sx = hero ? 600 : 850, sy = hero ? 104 : 54;
+    var sx = hero ? (nw ? 330 : 600) : (nw ? 300 : 850), sy = hero ? 104 : 54;
+    if (hero) { o.push('<circle cx="' + (nw ? 90 : 190) + '" cy="58" r="9" fill="#7fb2ff" fill-opacity=".25"/><circle class="tw" cx="' + (nw ? 90 : 190) + '" cy="58" r="3.6" fill="#9cc4ff"/>'); }   // Earth, a morning star seen from Mars
     o.push('<g class="sun' + (flare ? ' flare' : '') + (hero ? ' sunrise' : '') + '"><circle class="sunglow" cx="' + sx + '" cy="' + sy + '" r="' + (flare ? 70 : 52) + '" fill="url(#sung)"/><circle cx="' + sx + '" cy="' + sy + '" r="20" fill="#fff6dc"/></g>');
     o.push('<path d="M0 132 C120 104 230 124 340 114 C460 102 570 128 690 116 C810 104 910 124 1000 112 L1000 200 L0 200Z" fill="' + far + '"/>');
     o.push('<path d="M0 158 C160 146 300 160 460 154 C610 148 770 162 1000 150 L1000 200 L0 200Z" fill="' + near + '"/>');
     for (i = 0; i < 14; i++) { o.push('<ellipse cx="' + Math.round(rnd() * 1000) + '" cy="' + (166 + Math.round(rnd() * 28)) + '" rx="' + (3 + Math.round(rnd() * 6)) + '" ry="2.5" fill="#00000022"/>'); }
     if (!hero) {
+      o.push(nw ? '<g transform="translate(-124 62) scale(.6)">' : '<g>');
       // habitat dome, with what the crew built
       if (s.shelterToday) { o.push('<ellipse class="bub" cx="330" cy="140" rx="96" ry="78" fill="#7447ff" fill-opacity=".18" stroke="#7447ff" stroke-width="3"/>'); }
       o.push('<path d="M262 160 A68 58 0 0 1 398 160 Z" fill="#fbfcff" stroke="#17224d" stroke-width="4" stroke-linejoin="round"/>');
@@ -949,16 +1031,19 @@ function createEngine(data) {
       o.push('<g stroke="#17224d" stroke-width="3" stroke-linecap="round"><line x1="880" y1="162" x2="880" y2="132"/><path d="M858 112 A26 26 0 0 0 902 140" fill="#fbfcff" stroke-linejoin="round"/></g>');
       if (conj) { o.push('<g stroke="#e0262d" stroke-width="5" stroke-linecap="round"><circle cx="918" cy="96" r="16" fill="#fff" fill-opacity=".85"/><line x1="907" y1="85" x2="929" y2="107"/></g>'); }
       else { for (i = 0; i < 3; i++) { o.push('<path class="wave" style="animation-delay:' + (i * 0.6) + 's" d="M' + (900 + i * 10) + ' ' + (104 - i * 8) + ' a' + (12 + i * 10) + ' ' + (12 + i * 10) + ' 0 0 1 ' + (10 + i * 6) + ' ' + (16 + i * 6) + '" fill="none" stroke="#17224d" stroke-width="3" stroke-linecap="round"/>'); } }
+      o.push('</g>');
     }
     if (dust) { o.push('<g class="haze"><rect width="1000" height="200" fill="#8b5a3c" fill-opacity=".28"/><ellipse cx="200" cy="120" rx="260" ry="40" fill="#b07a55" fill-opacity=".35"/><ellipse cx="700" cy="90" rx="300" ry="34" fill="#b07a55" fill-opacity=".3" style="animation-delay:-4s"/></g>'); }
     if (storm) { o.push('<g class="rain">'); for (i = 0; i < 20; i++) { x = 20 + i * 52 + Math.round(rnd() * 20); o.push('<line x1="' + x + '" y1="-40" x2="' + (x - 22) + '" y2="0" stroke="' + (i % 2 ? '#9b4dff' : '#e0262d') + '" stroke-width="4" stroke-linecap="round" stroke-opacity=".75" style="animation-delay:-' + (rnd() * 0.9).toFixed(2) + 's"/>'); } o.push('</g>'); }
-    return '<svg class="scene" viewBox="0 0 1000 200" preserveAspectRatio="xMidYMax slice" xmlns="http://www.w3.org/2000/svg" focusable="false">' + o.join('') + '</svg>';
+    return '<svg class="scene" viewBox="0 0 ' + VW + ' 200" preserveAspectRatio="xMidYMax slice" xmlns="http://www.w3.org/2000/svg" focusable="false">' + o.join('') + '</svg>';
   }
   function stage(mood, text) {             // Kip stands in front of the live base scene
     var sky = h('div', { class: 'sky', 'aria-hidden': 'true' }), k = h('span', { class: 'kip', 'aria-hidden': 'true' });
-    sky.innerHTML = sceneSvg(state, false); k.innerHTML = kipSvg(mood, E.levels(state)); sky.appendChild(k);
-    return h('div', { class: 'stage mood-' + mood }, [sky,
-      h('div', { class: 'bubble' + (fxNow && fxNow.say ? ' say' : ''), 'aria-live': 'polite' }, [h('b', { class: 'who', str: 'Kip, your guide' }), h('span', { text: text })])]);
+    var nw = narrowView(), bub = h('div', { class: 'bubble' + (fxNow && fxNow.say ? ' say' : ''), 'aria-live': 'polite' }, [h('b', { class: 'who', str: 'Kip, your guide' }), h('span', { text: text })]);
+    sky.innerHTML = sceneSvg(state, false); k.innerHTML = kipSvg(mood, E.levels(state));
+    if (nw) { return h('div', { class: 'stage narrow mood-' + mood }, [sky, h('div', { class: 'kiprow' }, [k, bub])]); }
+    sky.appendChild(k);
+    return h('div', { class: 'stage mood-' + mood }, [sky, bub]);
   }
   function heroStage() {
     var sky = h('div', { class: 'sky', 'aria-hidden': 'true' }), k = h('span', { class: 'kip', 'aria-hidden': 'true' });
@@ -1063,14 +1148,14 @@ function createEngine(data) {
   /* ---- debrief chart: the three bars, sol by sol (numbers only go into the svg) ---- */
   var LINE = { ls: '#1d9bf0', power: '#b07800', shield: '#7447ff' };
   function missionChart() {
-    var Hs = state.history, n = Hs.length, W = 1000, Ht = 380, L = 64, R = 190, Tp = 46, B = 46, pw = W - L - R, ph = Ht - Tp - B, out = '', keys = ['ls', 'power', 'shield'], ends = [], i, k, y;
+    var nw = narrowView(), fs = nw ? 26 : 20, Hs = state.history, n = Hs.length, W = nw ? 620 : 1000, Ht = nw ? 440 : 380, L = nw ? 58 : 64, R = nw ? 170 : 190, Tp = 46, B = 48, pw = W - L - R, ph = Ht - Tp - B, out = '', keys = ['ls', 'power', 'shield'], ends = [], i, k, y;
     function X(i) { return L + (n ? i / n : 0) * pw; }
     function Y(p) { return Tp + (1 - p / 100) * ph; }
     function pct(v, k) { return Math.max(0, Math.min(100, v / T.max[k] * 100)); }
     out += '<rect x="' + L + '" y="' + Y(T.warn.danger * 100) + '" width="' + pw + '" height="' + (Y(0) - Y(T.warn.danger * 100)) + '" fill="#ffe0e1"/>';
     for (i = 0; i < n; i++) { if (Hs[i].dust) { out += '<rect x="' + X(i) + '" y="' + Tp + '" width="' + (X(i + 1) - X(i)) + '" height="' + ph + '" fill="#eadcc8"/>'; } }
-    [0, 50, 100].forEach(function (g) { out += '<line x1="' + L + '" x2="' + (L + pw) + '" y1="' + Y(g) + '" y2="' + Y(g) + '" stroke="#c6d3ee" stroke-width="2"/><text x="' + (L - 10) + '" y="' + (Y(g) + 7) + '" text-anchor="end" font-size="20">' + g + '%</text>'; });
-    for (i = 0; i <= n; i += 5) { out += '<text x="' + X(i) + '" y="' + (Ht - 14) + '" text-anchor="middle" font-size="20">' + (i === 0 ? 'Start' : 'Sol ' + i) + '</text>'; }
+    [0, 50, 100].forEach(function (g) { out += '<line x1="' + L + '" x2="' + (L + pw) + '" y1="' + Y(g) + '" y2="' + Y(g) + '" stroke="#c6d3ee" stroke-width="2"/><text x="' + (L - 10) + '" y="' + (Y(g) + 7) + '" text-anchor="end" font-size="' + fs + '">' + g + '%</text>'; });
+    for (i = 0; i <= n; i += nw ? 10 : 5) { out += '<text x="' + X(i) + '" y="' + (Ht - 14) + '" text-anchor="middle" font-size="' + fs + '">' + (i === 0 ? 'Start' : 'Sol ' + i) + '</text>'; }
     for (i = 0; i < n; i++) { if (Hs[i].storm) { out += '<line x1="' + X(i + 1) + '" x2="' + X(i + 1) + '" y1="' + Tp + '" y2="' + (Tp + ph) + '" stroke="#e0262d" stroke-width="2" stroke-dasharray="6 6"/><text x="' + X(i + 1) + '" y="' + (Tp - 12) + '" text-anchor="middle" font-size="26">🌩️</text>'; } }
     keys.forEach(function (k) {
       var pts = [X(0) + ',' + Y(pct(T.start[k], k))];
@@ -1082,7 +1167,7 @@ function createEngine(data) {
     for (i = 1; i < ends.length; i++) { if (ends[i].y - ends[i - 1].y < 30) { ends[i].y = ends[i - 1].y + 30; } }
     ends.forEach(function (e) {
       var v = state[e.k], lab = e.k === 'ls' ? '💨 ' + Math.round(v) + '%' : e.k === 'power' ? '⚡ ' + Math.round(v) + ' kWh' : '🛡️ ' + (Math.round(v * 10) / 10) + ' mSv';
-      out += '<text x="' + (L + pw + 14) + '" y="' + (e.y + 8) + '" font-size="24" font-weight="800" fill="' + LINE[e.k] + '">' + lab + '</text>';
+      out += '<text x="' + (L + pw + 14) + '" y="' + (e.y + 8) + '" font-size="' + (nw ? 28 : 24) + '" font-weight="800" fill="' + LINE[e.k] + '">' + lab + '</text>';
     });
     var box = h('div', { role: 'img', 'aria-label': 'Line chart of your three bars over ' + n + ' sols. At the end: Life Support ' + Math.round(state.ls) + '%, Power ' + Math.round(state.power) + ' kWh, Shield ' + (Math.round(state.shield * 10) / 10) + ' mSv. Particle storms: ' + state.stormsHit + '.' });
     box.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + Ht + '" xmlns="http://www.w3.org/2000/svg" focusable="false" style="font-family:inherit" fill="#17224d">' + out + '</svg>';
@@ -1110,7 +1195,7 @@ function createEngine(data) {
         h('p', { text: DATA.meta.mode === 'live' ? 'The space weather is real. This game replays the last 30 days of NASA data.' : 'The space weather is real. Every game replays 30 days of NASA data.' }),
         h('p', {}, [badge()])
       ]),
-      h('div', { class: 'panel' }, [h('h2', { str: 'Pick your rank' }), h('div', { class: 'ranks' }, [
+      h('div', { class: 'panel' }, [h('div', { class: 'rankhead' }, [h('h2', { str: 'Pick your rank' }), soundBtn()]), h('div', { class: 'ranks' }, [
         rankBtn('cadet', '🧑‍🚀 Cadet', 'Start here. Air lasts longer.'),
         rankBtn('commander', '🚀 Commander', 'The full challenge. Air runs out faster.')])]),
       footer()
@@ -1132,6 +1217,7 @@ function createEngine(data) {
       h('div', { class: 'top' }, [
         h('div', { class: 'sol', text: 'Sol ' + state.sol + ' of ' + T.sols }),
         h('span', { class: 'rankchip', str: state.level === 'cadet' ? '🧑‍🚀 Cadet' : '🚀 Commander' }),
+        h('span', { class: 'tools' }, [helpBtn(), soundBtn()]),
         h('div', { class: 'dim', str: 'Real NASA day ' + e.date + (DATA.meta.mode === 'live' ? ' (last 30 days)' : ' (archive, not live)') })
       ]),
       h('div', { class: 'solbar', 'aria-hidden': 'true' }, [h('i', { style: 'width:' + (state.sol - 1) / T.sols * 100 + '%' })]),
@@ -1216,14 +1302,22 @@ function createEngine(data) {
     return h('div', {}, kids);
   }
 
+  var lastScreen = null, lastNarrow = null;
   function render() {
     fxNow = fx; fx = null;
     found = []; wordsHolder = h('div', {});
     app.textContent = '';
-    app.appendChild(screen === 'start' ? startScreen() : screen === 'end' ? endScreen() : screen === 'sources' ? sourcesScreen() : gameScreen());
+    var root = screen === 'start' ? startScreen() : screen === 'end' ? endScreen() : screen === 'sources' ? sourcesScreen() : gameScreen();
+    if (screen !== lastScreen) { root.classList.add('screen-in'); lastScreen = screen; }
+    lastNarrow = narrowView();
+    app.appendChild(root);
     if (screen !== 'sources') { var wp = wordsPanel(); if (wp) { wordsHolder.appendChild(wp); } } else { shownWords = []; }
     runFx(fxNow);
   }
+  window.addEventListener('resize', function () {          // phone <-> wide: redraw the scene and chart for the new size
+    clearTimeout(window.__o30rs);
+    window.__o30rs = setTimeout(function () { if (lastNarrow !== null && narrowView() !== lastNarrow && !document.querySelector('.dusk')) { render(); } }, 200);
+  });
   loadLive().then(function (live) {
     try {
       if (live) { var eng = createEngine(live); DATA = live; E = eng; T = E.TUNING; feed = 'live'; } else { feed = 'archive'; }
