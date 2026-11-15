@@ -1,23 +1,23 @@
 1
 00:00:00,000 --> 00:00:05,000
-Team Nabeghlavi presents Outpost 30 for the NASA Space Apps challenge “Build a Junior Astronaut Mission Trainer”.
+Hi! We’re team Nabeghlavi. Our challenge: Build a Junior Astronaut Mission Trainer, so kids can feel real mission trade-offs.
 
 2
 00:00:05,000 --> 00:00:10,000
-Each sol replays a real NASA day. On 18 January 2026, NASA DONKI logged an X1.9 solar flare.
+Outpost 30: keep a Mars base alive for 30 sols. Every choice costs something, and the space weather is real.
 
 3
 00:00:10,000 --> 00:00:15,000
-The same day, NASA’s SOHO observatory detected a particle storm near Earth. Storm shelter costs 8 kWh and a card tomorrow.
+Each sol replays real NASA data. On 18 January 2026, NASA DONKI logged an X1.9 solar flare and a particle storm.
 
 4
 00:00:15,000 --> 00:00:20,000
-We pay 8 kWh: the storm takes 1.2 mSv of Shield instead of 4. Sunset shows the cost. No choice is free.
+Storm shelter costs 8 kWh and a card tomorrow, but cuts the storm’s hit by 70%. No choice is free.
 
 5
 00:00:20,000 --> 00:00:25,000
-13 NASA and CSA datasets, each with its source link. Space weather is live when online, and says so.
+Kids aged 7 to 12 learn how air, power and radiation shielding trade off, using 13 NASA and CSA datasets.
 
 6
 00:00:25,000 --> 00:00:30,000
-Play free in any browser, no account needed. Pick Cadet or Commander, then scan the code or open the link.
+Free in any browser, offline, no account: a classroom-ready mission trainer. Scan the code to play!
