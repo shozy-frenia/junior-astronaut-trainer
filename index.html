@@ -906,11 +906,36 @@ function createEngine(data) {
       '<circle cx="27" cy="23" r="3.2" fill="#cfd9f5"/><circle cx="70" cy="19" r="2.4" fill="#cfd9f5"/><circle cx="77" cy="31" r="3.4" fill="#cfd9f5"/>' +
       '<rect x="19" y="31" width="62" height="37" rx="18.5" fill="' + INK + '"/><ellipse cx="31" cy="38.5" rx="7" ry="3" fill="#fff" opacity=".55" transform="rotate(-20 31 38.5)"/><g class="eyes">' + face + '</g></svg>';
   }
+
+  /* ---- read aloud: younger players can hear Kip and the morning report (built into the browser, works offline) ---- */
+  function canSpeak() { try { return 'speechSynthesis' in window && typeof SpeechSynthesisUtterance === 'function'; } catch (err) { return false; } }
+  function speakBtn(getText, label) {
+    if (!canSpeak()) { return null; }
+    return h('button', { class: 'saybtn', 'aria-label': label || 'Read this to me', title: label || 'Read this to me', onclick: function (ev) {
+      ev.stopPropagation();
+      var ss = window.speechSynthesis;
+      if (ss.speaking) { ss.cancel(); return; }
+      var u = new SpeechSynthesisUtterance(getText()); u.lang = 'en-US'; u.rate = 0.92; ss.speak(u);
+    } }, [ic('soundOn'), h('span', { class: 'sl', str: label ? 'Read to me' : 'Listen' })]);
+  }
+  function teacherPanel() {
+    var base = location.href.split('?')[0].split('#')[0], url = base + '?seed=' + state.seed + '&level=' + state.level + '&archive=1';
+    var inp = h('input', { class: 'clslink', readonly: 'readonly', value: url, 'aria-label': 'Class link' });
+    var done = h('span', { class: 'dim', 'aria-live': 'polite' });
+    var btn = h('button', { class: 'src', onclick: function () {
+      inp.select();
+      var ok = function () { done.textContent = ' Copied!'; };
+      try { if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(url).then(ok, function () { document.execCommand('copy'); ok(); }); } else { document.execCommand('copy'); ok(); } } catch (err) { done.textContent = ' Select the link and copy it.'; }
+    } }, withIc('book', 'Copy class link'));
+    return h('div', { class: 'panel teach' }, [h('h2', {}, [icb('astronaut'), ' For teachers and parents']),
+      h('p', { str: 'Give a class this link. Everyone plays the same mission with the same saved NASA data, so kids can compare their choices afterwards.' }),
+      inp, h('p', {}, [btn, done])]);
+  }
   function guide(mood, text, big) {
     var k = h('span', { class: 'kip', 'aria-hidden': 'true' });
     k.innerHTML = kipSvg(mood, state ? E.levels(state) : null);          // static strings only, nothing from the player or the network
     return h('div', { class: 'guide mood-' + mood + (big ? ' big-kip' : '') }, [k,
-      h('div', { class: 'bubble', 'aria-live': 'polite' }, [h('b', { class: 'who', str: 'Kip, your guide' }), h('span', { text: text })])]);
+      h('div', { class: 'bubble', 'aria-live': 'polite' }, [h('b', { class: 'who', str: 'Kip, your guide' }), h('span', { text: text }), speakBtn(function () { return text; })])]);
   }
 
   /* ---- motion: what changed since the last action, so only real changes animate ---- */
@@ -1089,7 +1114,7 @@ function createEngine(data) {
   }
   function stage(mood, text) {             // Kip stands in front of the live base scene
     var sky = h('div', { class: 'sky', 'aria-hidden': 'true' }), k = h('span', { class: 'kip', 'aria-hidden': 'true' });
-    var nw = narrowView(), bub = h('div', { class: 'bubble' + (fxNow && fxNow.say ? ' say' : ''), 'aria-live': 'polite' }, [h('b', { class: 'who', str: 'Kip, your guide' }), h('span', { text: text })]);
+    var nw = narrowView(), bub = h('div', { class: 'bubble' + (fxNow && fxNow.say ? ' say' : ''), 'aria-live': 'polite' }, [h('b', { class: 'who', str: 'Kip, your guide' }), h('span', { text: text }), speakBtn(function () { return text; })]);
     sky.innerHTML = sceneSvg(state, false); k.innerHTML = kipSvg(mood, E.levels(state));
     if (nw) { return h('div', { class: 'stage narrow mood-' + mood }, [sky, h('div', { class: 'kiprow' }, [k, bub])]); }
     sky.appendChild(k);
@@ -1144,7 +1169,7 @@ function createEngine(data) {
     return h('div', { class: 'ev ' + it.kind }, kids);
   }
   function reportPanel() {
-    var items = E.report(state), kids = [h('h2', { str: 'Morning report' })], enter = fxNow && fxNow.newSol;
+    var items = E.report(state), kids = [h('div', { class: 'rephead' }, [h('h2', { str: 'Morning report' }), items.length ? speakBtn(function () { return 'Morning report. ' + items.map(function (it) { return it.title + '. ' + it.text; }).join(' '); }, 'Read the report to me') : null])], enter = fxNow && fxNow.newSol;
     if (state.lastSunset && state.sol > 1) {
       var L = state.lastSunset;
       kids.push(h('div', { class: 'lastsun' }, [h('span', { class: 'dim', str: 'Last sunset:' }),
@@ -1317,6 +1342,7 @@ function createEngine(data) {
       h('div', { class: 'deb' }, [h('div', {}, left), h('div', {}, right)]),
       h('button', { class: 'big', onclick: start, str: 'Play again as ' + (state.level === 'cadet' ? 'Cadet' : 'Commander') }),
       h('button', { class: 'quiet', onclick: function () { markShown(); screen = 'start'; render(); window.scrollTo(0, 0); }, str: 'Change rank' }),
+      teacherPanel(),
       footer()
     ]);
   }
