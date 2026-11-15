@@ -815,6 +815,7 @@ function createEngine(data) {
 
   /* ---- try NASA DONKI for the last 30 days; any problem means "use the archive" ---- */
   function loadLive() {
+    if (/[?&]archive=1\b/.test(location.search)) { return Promise.resolve(null); }   // ?archive=1: same saved mission for a demo or a class
     if (!D.live || typeof fetch !== 'function' || (typeof navigator !== 'undefined' && navigator.onLine === false)) { return Promise.resolve(null); }
     var today = new Date().toISOString().slice(0, 10), win = D.live.window(today);
     function get(kind) {

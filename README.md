@@ -19,7 +19,7 @@ Outpost 30 is a browser card game for kids aged 7–12, built for the NASA Space
 
 New players get a 4-step mission briefing (❓ How to play brings it back). Sound effects are off until you turn them on. The base is alive: an animated scene shows today's storms, flares, dust and breakdowns, and everything you built. A short sunset between sols shows what the base used overnight. After the mission, the debrief shows a sol-by-sol chart of your three bars, replays your game to find the 3 choices that mattered most, and compares your radiation dose with real Mars and space station measurements.
 
-Tips: tap any dotted word (sol, mSv, CME...) for a one-sentence explanation. Kip, your guide, gives hints. For a class, add `?seed=123&level=cadet` to the URL so everyone plays the same mission.
+Tips: tap any dotted word (sol, mSv, CME...) for a one-sentence explanation. Kip, your guide, gives hints. For a class or a demo, add `?seed=131&level=cadet&archive=1` to the URL: everyone plays the same saved mission (this one opens on a real X1.9 flare and a storm NASA's SOHO observatory detected on 18 January 2026).
 
 Files: `index.html` (game engine and UI), `data.js` (all real data, each value with source URL and retrieval date), `style.css`, `SOURCES.md` (full source notes and caveats), `tools/` (test and balance simulators, run with Node). Plain HTML/CSS/JS, no build step, no accounts.
 
